@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ألعاب الكاميرا للأطفال 🎪</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- طبقة الكاميرا (خلف كل شيء) -->
+<video id="cam" autoplay playsinline muted></video>
+<div id="cam-dim"></div>
+<canvas id="game"></canvas>
+
+<!-- شاشة الترحيب / طلب الكاميرا -->
+<div id="screen-intro" class="screen center">
+  <div class="intro-card">
+    <div class="logo">🎪</div>
+    <h1>ألعاب الكاميرا</h1>
+    <p class="sub">العب بحركة جسمك وإيدك قدام الكاميرا — بدون أي تحكم! 🙌</p>
+    <ul class="features">
+      <li>🎈 اضرب الكرات بإيدك</li>
+      <li>🍎 اصطياد الفواكه اللي بتقع من فوق</li>
+      <li>🐹 اضرب الخُلد لما يطلع من حفرة</li>
+    </ul>
+    <button id="btn-camera" class="btn big gradient">🎥 تشغيل الكاميرا واللعب</button>
+    <button id="btn-demo" class="btn ghost">🖱️ اللعب بدون كاميرا (بالماوس)</button>
+    <p id="intro-error" class="error hidden"></p>
+    <p class="privacy">🔒 الصورة تبقى داخل جهازك فقط ولا تُرسل لأي مكان</p>
+  </div>
+</div>
+
+<!-- القائمة الرئيسية -->
+<div id="screen-menu" class="screen center hidden">
+  <h1 class="menu-title">اختار لعبتك! 🎮</h1>
+  <div class="players-row" title="بوضع اللاعبَين تنقسم الشاشة نصفين وكل طفل يلعب بنصفه">
+    <button id="pl-1" class="pl-btn sel">👤 لاعب واحد</button>
+    <button id="pl-2" class="pl-btn">👥 لاعبان 🔵🔴</button>
+  </div>
+  <div class="games-grid">
+    <button class="game-card" data-game="pop">
+      <span class="gc-icon">🎈</span>
+      <span class="gc-name">اضرب الكرات</span>
+      <span class="gc-desc">اضرب الكرة بإيدك لما تظهر!</span>
+    </button>
+    <button class="game-card" data-game="catch">
+      <span class="gc-icon">🍎</span>
+      <span class="gc-name">اصطياد الفواكه</span>
+      <span class="gc-desc">حرّك جسمك لتحرّك السلة واصطاد!</span>
+    </button>
+    <button class="game-card" data-game="whack">
+      <span class="gc-icon">🐹</span>
+      <span class="gc-name">اضرب الخُلد</span>
+      <span class="gc-desc">اضرب الخُلد بإيدك قبل ما يختفي!</span>
+    </button>
+  </div>
+  <div class="settings-row">
+    <label class="setting" title="حساسية كشف الحركة">
+      <span>🔍 حساسية الحركة</span>
+      <input type="range" id="set-sens" min="1" max="5" step="1">
+    </label>
+    <button id="set-sound" class="btn chip">🔊</button>
+    <button id="set-mirror" class="btn chip">🪞</button>
+  </div>
+</div>
+
+<!-- شريط المعلومات أثناء اللعب -->
+<div id="hud" class="hidden">
+  <div class="hud-chip" id="hud-score">⭐ <b>0</b></div>
+  <div class="hud-chip" id="hud-timer">⏱ <b>0</b></div>
+  <div class="hud-chip" id="hud-lives"></div>
+  <div class="hud-spacer"></div>
+  <button id="btn-pause" class="btn chip">⏸️</button>
+  <button id="btn-exit" class="btn chip">✖️</button>
+</div>
+
+<!-- شاشة العد التنازلي -->
+<div id="screen-countdown" class="center hidden"><div id="count-num">3</div></div>
+
+<!-- شاشة النتائج -->
+<div id="screen-results" class="screen center hidden">
+  <div class="results-card">
+    <div class="stars" id="res-stars">⭐⭐⭐</div>
+    <h2 id="res-title">أحسنت! 🎉</h2>
+    <div class="res-score">نتيجتك: <b id="res-score">0</b></div>
+    <div class="res-2p hidden" id="res-2p">
+      <div class="p-scores">
+        <span class="blue">🔵 <b id="res-scoreA">0</b></span>
+        <span class="vs">VS</span>
+        <span class="red"><b id="res-scoreB">0</b> 🔴</span>
+      </div>
+      <div class="p-note">اللاعب الأزرق يسار الشاشة، الأحمر يمينها</div>
+    </div>
+    <div class="res-best" id="res-best">أفضل نتيجة: 0</div>
+    <button id="btn-replay" class="btn big gradient">🔄 مرة ثانية!</button>
+    <button id="btn-menu" class="btn ghost">🏠 القائمة الرئيسية</button>
+  </div>
+</div>
+
+<!-- شاشة الإيقاف المؤقت -->
+<div id="screen-paused" class="screen center hidden">
+  <div class="pause-card">
+    <h2>⏸️ استراحة</h2>
+    <button id="btn-resume" class="btn big gradient">▶️ كمل اللعب</button>
+    <button id="btn-quit" class="btn ghost">🏠 القائمة الرئيسية</button>
+  </div>
+</div>
+
+<!-- تلميح الحركة -->
+<div id="hint-move" class="hidden">✋ حرّك إيدك وجسمك!</div>
+
+<!-- مؤشر جاهزية الكاميرا -->
+<div id="cam-status" class="hidden"></div>
+
+<script src="js/audio.js"></script>
+<script src="js/motion.js"></script>
+<script src="js/games.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
