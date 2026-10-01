@@ -1762,7 +1762,7 @@ class Race3DGame extends GameBase {
     this.lives = this.twoPlayer ? null : 3;
     this.title = 'حرّك جسمك لقيادة العربية!';
     this.FOV = 420; this.FAR = 3000;
-    this.GW = -0.55;                    // ارتفاع مستوى الأرض بالعالم
+    this.GW = 0.55;                     // انحراف الأرض تحت خط الأفق (موجب = تحت)
     this.DZ = 118;                      // مستوى العربية (زمن التصادم)
     this.carY = this.H - 150;
     this.flashT = 0;
@@ -1834,7 +1834,7 @@ class Race3DGame extends GameBase {
         if (!it.resolved && it.z <= this.DZ) {
           it.resolved = true;
           const dx = Math.abs(it.x - v.px);
-          const p = this.proj(v, it.x, this.GW + .42, this.DZ);
+          const p = this.proj(v, it.x, this.GW - .3, this.DZ);
           const fx = Math.max(v.vx + 30, Math.min(v.vx + v.vw - 30, p.x));
           const fy = Math.max(60, Math.min(this.H - 40, p.y));
           if (it.type === 'obstacle') {
@@ -1907,27 +1907,27 @@ class Race3DGame extends GameBase {
       const period = 240, dash = 120, off = v.scroll % period;
       for (let z = off; z < this.FAR; z += period) {
         if (z < 90) continue;
-        const a = this.proj(v, -.05, this.GW + .01, z), b = this.proj(v, .05, this.GW + .01, z);
-        const c = this.proj(v, .05, this.GW + .01, z + dash), d = this.proj(v, -.05, this.GW + .01, z + dash);
+        const a = this.proj(v, -.05, this.GW - .005, z), b = this.proj(v, .05, this.GW - .005, z);
+        const c = this.proj(v, .05, this.GW - .005, z + dash), d = this.proj(v, -.05, this.GW - .005, z + dash);
         ctx.fillStyle = 'rgba(255,255,255,.65)';
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.closePath(); ctx.fill();
         // كرابات الحواف
         for (const ex of [-1.15, 1.12]) {
-          const e1 = this.proj(v, ex, this.GW + .01, z), e2 = this.proj(v, ex + .07, this.GW + .01, z);
-          const e3 = this.proj(v, ex + .07, this.GW + .01, z + dash * .8), e4 = this.proj(v, ex, this.GW + .01, z + dash * .8);
+          const e1 = this.proj(v, ex, this.GW - .005, z), e2 = this.proj(v, ex + .07, this.GW - .005, z);
+          const e3 = this.proj(v, ex + .07, this.GW - .005, z + dash * .8), e4 = this.proj(v, ex, this.GW - .005, z + dash * .8);
           ctx.fillStyle = (Math.floor((z - off) / period) % 2) ? 'rgba(239,68,68,.8)' : 'rgba(255,255,255,.8)';
           ctx.beginPath(); ctx.moveTo(e1.x, e1.y); ctx.lineTo(e2.x, e2.y); ctx.lineTo(e3.x, e3.y); ctx.lineTo(e4.x, e4.y); ctx.closePath(); ctx.fill();
         }
       }
 
-      // الأغراض (من البعيد للقريب)
+      // الأغراض (من البعيد للقريب) — قاعدتها على الأرض (alphabetic)
       const sorted = [...v.items].sort((a, b) => b.z - a.z);
       for (const it of sorted) {
-        const p = this.proj(v, it.x, this.GW + .42, it.z);
+        const p = this.proj(v, it.x, this.GW, it.z);
         if (p.x < v.vx - 150 || p.x > v.vx + v.vw + 150) continue;
         ctx.save();
         ctx.font = `${Math.max(11, Math.min(150, Math.round(80 * p.s)))}px serif`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
         ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 6;
         ctx.fillText(it.emoji, p.x, p.y);
         ctx.restore();
@@ -2002,7 +2002,7 @@ class Runner3DGame extends GameBase {
     this.lives = this.twoPlayer ? null : 3;
     this.title = 'اقفز، انبطح، وبدّل الحارة!';
     this.FOV = 420; this.FAR = 3000;
-    this.GW = -0.55;
+    this.GW = 0.55;                     // انحراف الأرض تحت خط الأفق (موجب = تحت)
     this.DZ = 118;
     this.chY = this.H - 150;
     this.JUMP_DUR = 0.72;
@@ -2098,7 +2098,7 @@ class Runner3DGame extends GameBase {
         it.z -= speed * dt;
         if (!it.resolved && it.z <= this.DZ) {
           it.resolved = true;
-          const p = this.proj(v, SUB_LANES[it.lane], this.GW + .3, this.DZ);
+          const p = this.proj(v, SUB_LANES[it.lane], this.GW - .3, this.DZ);
           const fx = Math.max(v.vx + 30, Math.min(v.vx + v.vw - 30, p.x));
           const fy = Math.max(60, Math.min(this.H - 40, p.y));
           if (it.lane === v.lane) {
@@ -2142,11 +2142,11 @@ class Runner3DGame extends GameBase {
       if (this.lives <= 0) { this.endGame(); return; }
     }
   }
-  /* حاجز مرسوم بين نقطتي عمق بأي ارتفاعين */
-  drawBarrier(ctx, v, lane, y0, y1, z, color, stripe) {
+  /* حاجز مرسوم بين ارتفاعين فوق الأرض (h0..h1) عند عمق z */
+  drawBarrier(ctx, v, lane, h0, h1, z, color, stripe) {
     const wx = SUB_LANES[lane], hw = .3;
-    const a = this.proj(v, wx - hw, this.GW + y1, z), b = this.proj(v, wx + hw, this.GW + y1, z);
-    const c = this.proj(v, wx + hw, this.GW + y0, z), d = this.proj(v, wx - hw, this.GW + y0, z);
+    const a = this.proj(v, wx - hw, this.GW - h1, z), b = this.proj(v, wx + hw, this.GW - h1, z);
+    const c = this.proj(v, wx + hw, this.GW - h0, z), d = this.proj(v, wx - hw, this.GW - h0, z);
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y);
@@ -2196,8 +2196,8 @@ class Runner3DGame extends GameBase {
       for (const dx of [-0.36, 0.36]) {
         for (let z = off; z < this.FAR; z += period) {
           if (z < 90) continue;
-          const a = this.proj(v, dx - .03, this.GW + .01, z), b = this.proj(v, dx + .03, this.GW + .01, z);
-          const c = this.proj(v, dx + .03, this.GW + .01, z + dash), d2 = this.proj(v, dx - .03, this.GW + .01, z + dash);
+          const a = this.proj(v, dx - .03, this.GW - .005, z), b = this.proj(v, dx + .03, this.GW - .005, z);
+          const c = this.proj(v, dx + .03, this.GW - .005, z + dash), d2 = this.proj(v, dx - .03, this.GW - .005, z + dash);
           ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d2.x, d2.y); ctx.closePath(); ctx.fill();
         }
       }
@@ -2212,10 +2212,10 @@ class Runner3DGame extends GameBase {
         } else if (it.type === 'wall') {
           this.drawBarrier(ctx, v, it.lane, 0, 1.15, it.z, 'rgba(220,38,38,.9)', 'rgba(255,255,255,.75)');
         } else {
-          const p = this.proj(v, SUB_LANES[it.lane], this.GW + .4, it.z);
+          const p = this.proj(v, SUB_LANES[it.lane], this.GW - .05, it.z);
           ctx.save();
           ctx.font = `${Math.max(11, Math.min(120, Math.round(65 * p.s)))}px serif`;
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
           ctx.fillText(it.type === 'star' ? '⭐' : '💎', p.x, p.y);
           ctx.restore();
         }
