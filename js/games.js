@@ -716,13 +716,13 @@ class RaceGame extends GameBase {
       ctx.fillStyle = 'rgba(255,255,255,.75)';
       ctx.fillRect(r.x0, 60, 6, this.H - 60);
       ctx.fillRect(r.x1 - 6, 60, 6, this.H - 60);
-      // خطوط الحارات المتحركة (إحساس السرعة)
+      // خطوط الحارات المتحركة: تنزل تحت مع الشارع (إحساس التقدم للأمام)
       const dashH = 46, gap = 34, period = dashH + gap;
       const off = r.scroll % period;
       ctx.fillStyle = 'rgba(255,255,255,.5)';
       for (let li = 1; li < 3; li++) {
         const lx = r.x0 + (r.x1 - r.x0) * li / 3;
-        for (let y = 60 + period - off; y < this.H; y += period)
+        for (let y = 60 + off - period; y < this.H; y += period)
           ctx.fillRect(lx - 3, y, 6, dashH);
       }
       // الأغراض
