@@ -61,7 +61,7 @@ async function startCamera() {
   const err = $('intro-error');
   err.classList.add('hidden');
   $('btn-camera').disabled = true;
-  $('btn-camera').textContent = '⏳ جاري تشغيل الكاميرا...';
+  $('btn-camera').textContent = t('waiting');
   try {
     app.engine = new MotionEngine($('cam'));
     app.engine.mirror = localStorage.getItem('kc_mirror') !== 'off';
@@ -69,20 +69,20 @@ async function startCamera() {
     app.engine.setSensitivity(parseInt(localStorage.getItem('kc_sens') || '3', 10));
     await app.engine.start();
     app.demoMode = false;
-    $('cam-status').textContent = '🎥 الكاميرا شغالة — الصورة لا تُرسل لأي مكان';
+    $('cam-status').textContent = t('camStatus');
     show('cam-status');
     gotoMenu();
   } catch (e) {
-    let msg = 'تعذّر تشغيل الكاميرا 😕';
+    let msg = t('errGeneric');
     if (e && (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError'))
-      msg = 'منعت المتصفح من استخدام الكاميرا.\nاسمح للكاميرا من إعدادات المتصفح ثم حاول مرة ثانية، أو العب بالماوس.';
-    else if (e && e.name === 'NotFoundError') msg = 'ما لقينا كاميرا متصلة بالجهاز 😕';
-    else if (location.protocol === 'file:') msg = 'افتح اللعبة عبر run.bat وليس مباشرة من الملف (الكاميرا تحتاج خادم محلي)';
+      msg = t('errNotAllowed');
+    else if (e && e.name === 'NotFoundError') msg = t('errNotFound');
+    else if (location.protocol === 'file:') msg = t('errFile');
     err.textContent = msg;
     err.classList.remove('hidden');
   }
   $('btn-camera').disabled = false;
-  $('btn-camera').textContent = '🎥 تشغيل الكاميرا واللعب';
+  $('btn-camera').textContent = t('btnCamera');
 }
 
 function startDemo() {
@@ -115,11 +115,11 @@ async function startGame(key) {
   // العد التنازلي 3..2..1
   show('screen-countdown');
   const numEl = $('count-num');
-  for (const n of ['3', '2', '1', 'انطلق!']) {
+  for (const n of ['3', '2', '1', t('go')]) {
     numEl.textContent = n;
     // إعادة تشغيل الأنيميشن
     numEl.style.animation = 'none'; void numEl.offsetWidth; numEl.style.animation = '';
-    if (n === 'انطلق!') SFX.go(); else SFX.tick();
+    if (n === t('go')) SFX.go(); else SFX.tick();
     await new Promise(r => setTimeout(r, 850));
   }
   hide('screen-countdown');
@@ -143,20 +143,20 @@ function showResults(key, game) {
   if (game.twoPlayer) {
     // وضع اللاعبَين: عرض نتيجتي الجهتين والفائز
     $('res-stars').classList.add('hidden');
-    $('res-score').classList.add('hidden');
+    $('res-score-line').classList.add('hidden');
     $('res-best').classList.add('hidden');
     $('res-2p').classList.remove('hidden');
     $('res-scoreA').textContent = game.scoreA;
     $('res-scoreB').textContent = game.scoreB;
     let title;
-    if (game.scoreA > game.scoreB) title = 'فاز اللاعب الأزرق! 🔵🏆';
-    else if (game.scoreB > game.scoreA) title = 'فاز اللاعب الأحمر! 🔴🏆';
-    else title = 'تعادل! 🤝';
+    if (game.scoreA > game.scoreB) title = t('blueWins');
+    else if (game.scoreB > game.scoreA) title = t('redWins');
+    else title = t('tie');
     $('res-title').textContent = title;
     SFX.win();
   } else {
     $('res-stars').classList.remove('hidden');
-    $('res-score').classList.remove('hidden');
+    $('res-score-line').classList.remove('hidden');
     $('res-best').classList.remove('hidden');
     $('res-2p').classList.add('hidden');
 
@@ -168,9 +168,9 @@ function showResults(key, game) {
     const stars = score >= def.stars[2] ? 3 : score >= def.stars[1] ? 2 : score >= def.stars[0] ? 1 : 0;
     $('res-stars').innerHTML =
       '⭐'.repeat(stars) + '<span class="off">' + '⭐'.repeat(3 - stars) + '</span>';
-    $('res-title').textContent = stars === 3 ? 'مذهل! أنت بطل! 🏆' : stars === 2 ? 'أحسنت! 🎉' : stars === 1 ? 'جيد جداً! 👍' : 'حاول مرة ثانية! 💪';
-    $('res-score').innerHTML = 'نتيجتك: <b>' + score + '</b>';
-    $('res-best').textContent = 'أفضل نتيجة لك: ' + best + ' | ' + def.icon + ' ' + def.name;
+    $('res-title').textContent = t('resTitle' + stars);
+    $('res-score-line').innerHTML = t('resScore') + ': <b>' + score + '</b>';
+    $('res-best').textContent = t('resBest') + ': ' + best + ' | ' + def.icon + ' ' + t('game_' + key + '_name');
     if (stars >= 2) SFX.win(); else SFX.lose();
   }
   show('screen-results');
@@ -281,6 +281,10 @@ $('set-mirror').addEventListener('click', () => {
 /* ---------- ربط الأحداث ---------- */
 $('btn-camera').addEventListener('click', startCamera);
 $('btn-demo').addEventListener('click', () => { SFX.click(); startDemo(); });
+// زر تبديل اللغة (شاشة الترحيب + القائمة)
+document.querySelectorAll('[data-lang-btn]').forEach(btn =>
+  btn.addEventListener('click', () => { setLang(LANG === 'en' ? 'ar' : 'en'); SFX.click(); })
+);
 document.querySelectorAll('.game-card').forEach(btn =>
   btn.addEventListener('click', () => { SFX.click(); startGame(btn.dataset.game); })
 );

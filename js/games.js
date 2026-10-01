@@ -697,7 +697,7 @@ class RaceGame extends GameBase {
           } else if (it.type === 'rocket') {
             r.boost = 3;
             SFX.go();
-            this.texts.add(it.x, it.y - 20, '🚀 سرعة!', '#fb923c');
+            this.texts.add(it.x, it.y - 20, t('boost'), '#fb923c');
           }
         }
         if (it.y > this.H + 90) it.dead = true;

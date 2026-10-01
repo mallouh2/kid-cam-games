@@ -49,9 +49,14 @@ body {
 @keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
 .intro-card h1 { font-size: 34px; margin: 8px 0 6px; }
 .intro-card .sub { font-size: 17px; color: #5b21b6; margin-bottom: 14px; }
-.features { list-style: none; text-align: right; margin: 0 auto 18px; display: inline-block; }
+.features { list-style: none; text-align: start; margin: 0 auto 18px; display: inline-block; }
 .features li { font-size: 16px; padding: 4px 0; }
 .privacy { margin-top: 14px; font-size: 13px; color: #6b7280; }
+.lang-link {
+  background: none; border: none; cursor: pointer; font-family: inherit;
+  color: #7c3aed; font-size: 15px; font-weight: 700; margin-top: 10px;
+  text-decoration: underline;
+}
 .error { color: #dc2626; font-size: 15px; margin-top: 10px; }
 
 /* ===== الأزرار ===== */
@@ -143,7 +148,8 @@ input[type=range] { width: 140px; accent-color: #f59e0b; }
 .results-card h2 { font-size: 30px; margin-bottom: 10px; }
 .res-score { font-size: 24px; margin-bottom: 4px; }
 .res-2p { margin-bottom: 8px; }
-.p-scores { display: flex; align-items: center; justify-content: center; gap: 16px; font-size: 30px; font-weight: 800; }
+/* اتجاه ثابت LTR: الأزرق 🔵 دائماً يسار والأحمر 🔴 يمين — مطابق للعبة */
+.p-scores { display: flex; align-items: center; justify-content: center; gap: 16px; font-size: 30px; font-weight: 800; direction: ltr; }
 .p-scores .blue { color: #2563eb; }
 .p-scores .red { color: #dc2626; }
 .p-scores .vs { font-size: 20px; color: #9ca3af; }
