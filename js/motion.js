@@ -26,8 +26,9 @@ class MotionEngine {
     // مركز الحركة كنسب 0..1 من الشاشة
     this.cx = 0.5; this.cy = 0.5;
     this.hasTrack = false;
-    // مراكز كل نصف (يسار/يمين الشاشة) لوضع اللاعبَين
+    // مراكز كل نصف (يسار/يمين الشاشة) لوضع اللاعبَين — أفقي وعمودي
     this.cxL = 0.25; this.cxR = 0.75;
+    this.cyL = 0.5; this.cyR = 0.5;
     this.hasTrackL = false; this.hasTrackR = false;
     this.lastMoveTime = 0;
     this.stream = null;
@@ -115,9 +116,16 @@ class MotionEngine {
     const trackHalf = (cnt, sumHalfX, sumHalfY) => {
       if (cnt <= 40) return;
       const nx = (sumHalfX / cnt) / MW, ny = (sumHalfY / cnt) / MH;
-      const [sx] = this.camToScreen(nx, ny, W, H);
-      if (sx < W / 2) { this.cxL += (sx / W - this.cxL) * a; this.hasTrackL = true; }
-      else { this.cxR += (sx / W - this.cxR) * a; this.hasTrackR = true; }
+      const [sx, sy] = this.camToScreen(nx, ny, W, H);
+      if (sx < W / 2) {
+        this.cxL += (sx / W - this.cxL) * a;
+        this.cyL += (sy / H - this.cyL) * a;
+        this.hasTrackL = true;
+      } else {
+        this.cxR += (sx / W - this.cxR) * a;
+        this.cyR += (sy / H - this.cyR) * a;
+        this.hasTrackR = true;
+      }
       moved = true;
     };
     trackHalf(cL, sXL, sYL);

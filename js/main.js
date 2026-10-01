@@ -11,6 +11,7 @@ const app = {
   engine: null,        // MotionEngine أو null في وضع الماوس
   demoMode: false,
   players: parseInt(localStorage.getItem('kc_players') || '1', 10) === 2 ? 2 : 1,
+  learnMode: localStorage.getItem('kc_mode') === 'learn',
   currentGame: null,
   gameKey: null,
   paused: false,
@@ -139,6 +140,19 @@ async function startGame(key) {
 function stopGame() {
   app.currentGame = null;
   app.paused = false;
+  try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) { }
+}
+
+/* ---------- النطق الصوتي (وضع تعلّم) ---------- */
+function say(text) {
+  if (SFX.muted || !window.speechSynthesis || !text) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = LANG === 'ar' ? 'ar-SA' : 'en-US';
+    u.rate = .95;
+    speechSynthesis.speak(u);
+  } catch (e) { /* النطق غير مدعوم — النص المكتوب يكفي */ }
 }
 
 /* ---------- النتائج ---------- */
@@ -257,8 +271,8 @@ app.canvas.addEventListener('pointerdown', e => {
 });
 app.canvas.addEventListener('pointermove', e => {
   if (!app.currentGame || app.paused) return;
-  const [x] = canvasPos(e);
-  app.currentGame.onPointerMove && app.currentGame.onPointerMove(x);
+  const [x, y] = canvasPos(e);
+  app.currentGame.onPointerMove && app.currentGame.onPointerMove(x, y);
 });
 
 /* ---------- عدد اللاعبين ---------- */
@@ -275,6 +289,21 @@ $('pl-2').addEventListener('click', () => {
   updatePlayersUI(); SFX.click();
 });
 updatePlayersUI();
+
+/* ---------- وضع اللعب: عادي / تعلّم ---------- */
+function updateModeUI() {
+  $('mode-normal').classList.toggle('sel', !app.learnMode);
+  $('mode-learn').classList.toggle('sel', app.learnMode);
+}
+$('mode-normal').addEventListener('click', () => {
+  app.learnMode = false; localStorage.setItem('kc_mode', 'normal');
+  updateModeUI(); SFX.click();
+});
+$('mode-learn').addEventListener('click', () => {
+  app.learnMode = true; localStorage.setItem('kc_mode', 'learn');
+  updateModeUI(); SFX.click();
+});
+updateModeUI();
 
 /* ---------- الإعدادات ---------- */
 $('set-sens').value = localStorage.getItem('kc_sens') || '3';

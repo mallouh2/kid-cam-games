@@ -51,7 +51,24 @@ const I18N = {
     game_whack_name: 'Whack the Mole',
     game_whack_desc: 'Hit the mole before it hides!',
     game_race_name: 'Car Race',
-    game_race_desc: 'Move your body left & right to steer!'
+    game_race_desc: 'Move your body left & right to steer!',
+    game_dragon_name: 'Flying Dragon',
+    game_dragon_desc: 'Fly with your body, grab gems & rings!',
+    game_dance_name: 'Dance & Touch',
+    game_dance_desc: 'Touch the glowing orbs with your hands!',
+    game_goalie_name: 'Goalkeeper',
+    game_goalie_desc: 'Block the balls with your body!',
+    game_runner_name: 'Jungle Run',
+    game_runner_desc: 'Jump up & duck down to dodge!',
+    modeNormal: '🎮 Normal',
+    modeLearn: '🧠 Learn',
+    learnHit: 'Hit',
+    learnNum: 'number',
+    learnLetter: 'letter',
+    learnBall: 'the ball',
+    saveTxt: 'SAVE! 🧤',
+    goalTxt: 'GOAL! ⚽',
+    f5: '🐉🥅🕺🏃 …and 4 more games inside!'
   },
   ar: {
     title: 'ألعاب الكاميرا للأطفال 🎪',
@@ -99,7 +116,24 @@ const I18N = {
     game_whack_name: 'اضرب الخُلد',
     game_whack_desc: 'اضرب الخُلد بإيدك قبل ما يختفي!',
     game_race_name: 'سباق السيارات',
-    game_race_desc: 'حرّك جسمك يمين ويسار لقيادة العربية!'
+    game_race_desc: 'حرّك جسمك يمين ويسار لقيادة العربية!',
+    game_dragon_name: 'التنين الطاير',
+    game_dragon_desc: 'طر بجسمك، اجمع الجواهر واعبر الحلقات!',
+    game_dance_name: 'الرقص واللمس',
+    game_dance_desc: 'المس الكرات المضيئة بإيدك!',
+    game_goalie_name: 'حراسة المرمى',
+    game_goalie_desc: 'صدّ الكرات بجسمك وإيدك!',
+    game_runner_name: 'عدّي العوائق',
+    game_runner_desc: 'اقفز فوق وانبطح تحت لتفادي العوائق!',
+    modeNormal: '🎮 عادي',
+    modeLearn: '🧠 تعلّم',
+    learnHit: 'اضرب',
+    learnNum: 'الرقم',
+    learnLetter: 'الحرف',
+    learnBall: 'الكرة',
+    saveTxt: 'تصدي! 🧤',
+    goalTxt: 'هدف! ⚽',
+    f5: '🐉🥅🕺🏃 …و4 ألعاب أخرى بالداخل!'
   }
 };
 

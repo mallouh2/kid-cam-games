@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Kid Cam Games 🎪</title>
-<link rel="stylesheet" href="css/style.css?v=4">
+<link rel="stylesheet" href="css/style.css?v=5">
 </head>
 <body>
 
@@ -24,6 +24,7 @@
       <li data-i18n="f2">🍎 Catch the fruits falling from above</li>
       <li data-i18n="f3">🐹 Whack the mole when it pops out</li>
       <li data-i18n="f4">🚗 Race a car with your body</li>
+      <li data-i18n="f5">🐉🥅🕺🏃 …and 4 more games inside!</li>
     </ul>
     <button id="btn-camera" class="btn big gradient" data-i18n="btnCamera">🎥 Start Camera &amp; Play</button>
     <button id="btn-demo" class="btn ghost" data-i18n="btnDemo">🖱️ Play without camera (mouse)</button>
@@ -39,6 +40,8 @@
   <div class="players-row">
     <button id="pl-1" class="pl-btn sel" data-i18n="p1">👤 1 Player</button>
     <button id="pl-2" class="pl-btn" data-i18n="p2">👥 2 Players 🔵🔴</button>
+    <button id="mode-normal" class="pl-btn sel" data-i18n="modeNormal">🎮 Normal</button>
+    <button id="mode-learn" class="pl-btn" data-i18n="modeLearn">🧠 Learn</button>
   </div>
   <div class="games-grid">
     <button class="game-card" data-game="pop">
@@ -60,6 +63,26 @@
       <span class="gc-icon">🚗</span>
       <span class="gc-name" data-i18n="game_race_name">Car Race</span>
       <span class="gc-desc" data-i18n="game_race_desc">Move your body left &amp; right to steer!</span>
+    </button>
+    <button class="game-card" data-game="dragon">
+      <span class="gc-icon">🐉</span>
+      <span class="gc-name" data-i18n="game_dragon_name">Flying Dragon</span>
+      <span class="gc-desc" data-i18n="game_dragon_desc">Fly with your body, grab gems &amp; rings!</span>
+    </button>
+    <button class="game-card" data-game="dance">
+      <span class="gc-icon">🕺</span>
+      <span class="gc-name" data-i18n="game_dance_name">Dance &amp; Touch</span>
+      <span class="gc-desc" data-i18n="game_dance_desc">Touch the glowing orbs with your hands!</span>
+    </button>
+    <button class="game-card" data-game="goalie">
+      <span class="gc-icon">🥅</span>
+      <span class="gc-name" data-i18n="game_goalie_name">Goalkeeper</span>
+      <span class="gc-desc" data-i18n="game_goalie_desc">Block the balls with your body!</span>
+    </button>
+    <button class="game-card" data-game="runner">
+      <span class="gc-icon">🏃</span>
+      <span class="gc-name" data-i18n="game_runner_name">Jungle Run</span>
+      <span class="gc-desc" data-i18n="game_runner_desc">Jump up &amp; duck down to dodge!</span>
     </button>
   </div>
   <div class="settings-row">
@@ -120,10 +143,10 @@
 <!-- مؤشر جاهزية الكاميرا -->
 <div id="cam-status" class="hidden"></div>
 
-<script src="js/i18n.js?v=4"></script>
-<script src="js/audio.js?v=4"></script>
-<script src="js/motion.js?v=4"></script>
-<script src="js/games.js?v=4"></script>
-<script src="js/main.js?v=4"></script>
+<script src="js/i18n.js?v=5"></script>
+<script src="js/audio.js?v=5"></script>
+<script src="js/motion.js?v=5"></script>
+<script src="js/games.js?v=5"></script>
+<script src="js/main.js?v=5"></script>
 </body>
 </html>
