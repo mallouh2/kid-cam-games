@@ -323,6 +323,36 @@ $('set-sound').addEventListener('click', () => {
 });
 updateSoundBtn();
 
+/* ---------- ريموت الوي (WebHID) ---------- */
+function wiiStatus(msg) {
+  const el = $('cam-status');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.add('hidden'), 4500);
+}
+function updateWiiBtn() {
+  const n = (WII.devices[0] ? 1 : 0) + (WII.devices[1] ? 1 : 0);
+  $('set-wii').textContent = n ? '🎮' + n : '🎮';
+  $('set-wii').style.opacity = n ? 1 : .75;
+}
+(function initWii() {
+  if (!WII.supported()) { $('set-wii').style.display = 'none'; return; }
+  WII.autoConnect().then(n => { if (n) { wiiStatus(n === 1 ? t('wiiOn1') : t('wiiOn2')); updateWiiBtn(); } });
+  $('set-wii').addEventListener('click', async () => {
+    SFX.click();
+    try {
+      const slot = await WII.connectNext();
+      if (slot === null) wiiStatus(t('wiiCancel'));
+      else wiiStatus(slot === 0 ? t('wiiOn1') : t('wiiOn2'));
+    } catch (e) {
+      wiiStatus(t('wiiFail'));
+    }
+    updateWiiBtn();
+  });
+  updateWiiBtn();
+})();
+
 /* ---------- ربط الأحداث ---------- */
 $('btn-camera').addEventListener('click', startCamera);
 $('btn-demo').addEventListener('click', () => { SFX.click(); startDemo(); });

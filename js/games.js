@@ -2354,12 +2354,22 @@ class SaberGame extends GameBase {
     if (this.flashT > 0) this.flashT -= dt;
 
     // تتبع السيوف: نصف الشاشة = اليد المقابل (المرآة)
+    // وريموت الوي (إن وُصل) يتقدم على الكاميرا لسيفه
     for (const v of this.views) {
       for (const sb of v.sabers) {
         const zone = {
           x0: v.vx + 10, x1: v.vx + v.vw - 10, y0: 80, y1: this.H - 60
         };
-        const tgt = this.bodyTarget(v.side === null ? sb.color : v.side, now, { x: sb.x, y: sb.y }, zone);
+        const wiiSlot = v.side === null ? sb.color : v.side;
+        let tgt;
+        if (WII.devices[wiiSlot]) {
+          const wp = WII.saberPos(wiiSlot, { x: zone.x0, w: zone.x1 - zone.x0, y: zone.y0, h: zone.y1 - zone.y0 });
+          if (wp) {
+            tgt = wp;
+            if (wp.swing) sb.lastMove = now;
+          }
+        }
+        if (!tgt) tgt = this.bodyTarget(v.side === null ? sb.color : v.side, now, { x: sb.x, y: sb.y }, zone);
         const ox = sb.x, oy = sb.y;
         sb.x += (tgt.x - sb.x) * Math.min(1, dt * 10);
         sb.y += (tgt.y - sb.y) * Math.min(1, dt * 10);
