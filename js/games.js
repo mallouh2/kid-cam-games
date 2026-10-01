@@ -92,6 +92,9 @@ class GameBase {
       this.app.hudTimer(Math.max(0, Math.ceil(this.timeLeft)));
       if (this.timeLeft <= 0) this.endGame();
     }
+    // تحديث النقاط بحد أقصى 4 مرات/ثانية (نقاط المسافة تتراكم بسرعة بالسباق)
+    this._hudT = (this._hudT || 0) + dt;
+    if (this._hudT > 0.25) { this._hudT = 0; this.app.hudUpdate(this); }
     this.particles.update(dt);
     this.texts.update(dt);
     if (this.shakeT > 0) this.shakeT -= dt;
@@ -373,7 +376,6 @@ class CatchGame extends GameBase {
       ctx.save();
       ctx.translate(it.x, it.y); ctx.rotate(it.rot);
       ctx.font = `${size}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 8;
       ctx.fillText(it.emoji, 0, 0);
       ctx.restore();
     }
@@ -632,14 +634,13 @@ class RaceGame extends GameBase {
       const vx = (r.kartX - oldX) / Math.max(dt, .001);
       r.lean += (Math.max(-.35, Math.min(.35, vx / 1100)) - r.lean) * .15;
 
-      // المسافة تتحول نقاط (ضعفية أثناء التعزيز)
+      // المسافة تتحول نقاط (ضعفية أثناء التعزيز) — بدون تحديث HUD هنا (يتولاه baseUpdate)
       r.scroll += speed * dt; r.dist += speed * dt;
       if (r.dist >= 30) {
         r.dist -= 30;
         const pts = r.boost > 0 ? 2 : 1;
         if (this.twoPlayer) { if (r.side === 0) this.scoreA += pts; else this.scoreB += pts; }
         else this.score += pts;
-        this.app.hudUpdate(this);
       }
       if (r.inv > 0) r.inv -= dt;
       if (r.boost > 0) r.boost -= dt;
@@ -725,12 +726,11 @@ class RaceGame extends GameBase {
         for (let y = 60 + off - period; y < this.H; y += period)
           ctx.fillRect(lx - 3, y, 6, dashH);
       }
-      // الأغراض
+      // الأغراض (بدون ظلال — الظلال مكلفة وتقطّع الرسم مع كثرة العناصر)
       for (const it of r.items) {
         ctx.save();
         ctx.translate(it.x, it.y); ctx.rotate(it.rot);
         ctx.font = '56px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 8;
         ctx.fillText(it.emoji, 0, 0);
         ctx.restore();
       }

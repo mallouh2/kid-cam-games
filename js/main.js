@@ -20,18 +20,26 @@ const app = {
   H() { return this.canvas.clientHeight || window.innerHeight; },
 
   hudUpdate(g) {
+    // تحديث DOM فقط عند تغير القيمة (يمنع تخليط التخطيط كل إطار)
+    let s;
     if (g.twoPlayer) {
-      $('hud-score').innerHTML =
-        '<span style="color:#2563eb">🔵 <b>' + g.scoreA + '</b></span> ⚔️ <span style="color:#dc2626"><b>' + g.scoreB + '</b> 🔴</span>';
-      $('hud-lives').innerHTML = '';
+      s = '<span style="color:#2563eb">🔵 <b>' + g.scoreA + '</b></span> ⚔️ <span style="color:#dc2626"><b>' + g.scoreB + '</b> 🔴</span>';
+      if (this._hudScore !== s) { this._hudScore = s; $('hud-score').innerHTML = s; }
+      if (this._hudLives !== '') { this._hudLives = ''; $('hud-lives').innerHTML = ''; }
     } else {
-      $('hud-score').innerHTML = '⭐ <b>' + g.score + '</b>';
+      s = '⭐ <b>' + g.score + '</b>';
+      if (this._hudScore !== s) { this._hudScore = s; $('hud-score').innerHTML = s; }
+      let l = '';
       if (g.lives !== null && g.lives !== undefined) {
-        $('hud-lives').innerHTML = '❤️'.repeat(Math.max(0, g.lives)) + '<span style="opacity:.25">' + '❤️'.repeat(Math.max(0, 3 - g.lives)) + '</span>';
-      } else $('hud-lives').innerHTML = '';
+        l = '❤️'.repeat(Math.max(0, g.lives)) + '<span style="opacity:.25">' + '❤️'.repeat(Math.max(0, 3 - g.lives)) + '</span>';
+      }
+      if (this._hudLives !== l) { this._hudLives = l; $('hud-lives').innerHTML = l; }
     }
   },
-  hudTimer(sec) { $('hud-timer').innerHTML = '⏱ <b>' + sec + '</b>'; },
+  hudTimer(sec) {
+    const s = '⏱ <b>' + sec + '</b>';
+    if (this._hudTime !== s) { this._hudTime = s; $('hud-timer').innerHTML = s; }
+  },
   onEnd(game) { showResults(this.gameKey, game); }
 };
 
@@ -39,7 +47,8 @@ app.ctx = app.canvas.getContext('2d');
 
 /* ---------- ضبط الكانفس على مقاس النافذة (HiDPI) ---------- */
 function resizeCanvas() {
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  // سقف 1.5 يوفر رسم أقل بكثير على الشاشات عالية الكثافة بدون فرق ملموس للأطفال
+  const dpr = Math.min(1.5, window.devicePixelRatio || 1);
   const w = window.innerWidth, h = window.innerHeight;
   app.canvas.width = Math.round(w * dpr);
   app.canvas.height = Math.round(h * dpr);
@@ -64,8 +73,6 @@ async function startCamera() {
   $('btn-camera').textContent = t('waiting');
   try {
     app.engine = new MotionEngine($('cam'));
-    app.engine.mirror = localStorage.getItem('kc_mirror') !== 'off';
-    applyMirror();
     app.engine.setSensitivity(parseInt(localStorage.getItem('kc_sens') || '3', 10));
     await app.engine.start();
     app.demoMode = false;
@@ -204,9 +211,12 @@ function step(t) {
   }
   if (app.currentGame) {
     app.currentGame.draw(app.ctx);
-    // تلميح "حرّك إيدك" عند سكون الطفل
-    const idle = app.engine && app.engine.ready && app.engine.isIdle(5000);
-    $('hint-move').classList.toggle('hidden', !idle || app.paused);
+    // تلميح "حرّك إيدك" عند سكون الطفل (فقط عند تغير الحالة)
+    const showHint = app.engine && app.engine.ready && app.engine.isIdle(5000) && !app.paused;
+    if (app._hintState !== showHint) {
+      app._hintState = showHint;
+      $('hint-move').classList.toggle('hidden', !showHint);
+    }
   }
 }
 function loop(t) {
@@ -265,18 +275,6 @@ $('set-sound').addEventListener('click', () => {
   updateSoundBtn(); SFX.click();
 });
 updateSoundBtn();
-
-function applyMirror() {
-  $('cam').classList.toggle('no-mirror', app.engine && !app.engine.mirror);
-  $('set-mirror').style.opacity = app.engine && !app.engine.mirror ? .6 : 1;
-}
-$('set-mirror').addEventListener('click', () => {
-  if (!app.engine) return;
-  app.engine.mirror = !app.engine.mirror;
-  localStorage.setItem('kc_mirror', app.engine.mirror ? 'on' : 'off');
-  app.engine.prev = null;
-  applyMirror(); SFX.click();
-});
 
 /* ---------- ربط الأحداث ---------- */
 $('btn-camera').addEventListener('click', startCamera);

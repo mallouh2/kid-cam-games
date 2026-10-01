@@ -18,6 +18,7 @@ class MotionEngine {
     this.cur = new Uint8Array(this.MW * this.MH);
     this.prev = null;
     this.mask = new Uint8Array(this.MW * this.MH);
+    this.frameNo = 0;   // لمعالجة الحركة بنصف معدل الإطارات (توفير معالج)
     this.ready = false;
     this.mirror = true;              // العرض كالمرآة (سيلفي)
     this.diffThreshold = 28;         // عتبة فرق الإطارات (أقل = أكثر حساسية)
@@ -63,9 +64,12 @@ class MotionEngine {
     this.diffThreshold = table[Math.max(0, Math.min(4, level - 1))];
   }
 
-  /* تحديث قناع الحركة كل إطار. W,H = مقاس الكانفس المنطقي (CSS px) */
+  /* تحديث قناع الحركة. W,H = مقاس الكانفس المنطقي (CSS px)
+     يعمل كل إطارين (30fps كافية لحركة الأطفال) لتخفيف الحمل على المعالج */
   update(W, H) {
     if (!this.ready || this.video.readyState < 2) return;
+    this.frameNo++;
+    if (this.frameNo & 1) return;
     const { MW, MH, ctx, cur } = this;
     try { ctx.drawImage(this.video, 0, 0, MW, MH); } catch (e) { return; }
     const d = ctx.getImageData(0, 0, MW, MH).data;
@@ -120,9 +124,10 @@ class MotionEngine {
     trackHalf(cR, sXR, sYR);
     if (moved) this.lastMoveTime = performance.now();
 
-    // تبديل المخازن
+    // تدوير المخازن بدون تخصيص جديد كل إطار (يمنع ضغط جامع المخلفات والتقطيع)
+    const oldPrev = this.prev;
     this.prev = this.cur;
-    this.cur = new Uint8Array(MW * MH);
+    this.cur = oldPrev || new Uint8Array(MW * MH); // تخصيص لمرة واحدة فقط
   }
 
   /* تحويل نقطة شاشة (CSS px) إلى إحداثيات شبكة العمل، مع مراعاة قصّ cover والمرآة */
