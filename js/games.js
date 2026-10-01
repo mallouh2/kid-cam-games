@@ -548,9 +548,228 @@ class WhackGame extends GameBase {
   }
 }
 
+/* ============================================================
+   اللعبة 4: سباق السيارات 🚗 (بمبدأ Kart Racing على LeapTV)
+   الطفل يحرك جسمه يمين/يسار لقيادة العربية، يتفادى العوائق
+   ويجمع النجوم والجواهر وصواريخ السرعة
+   ============================================================ */
+const R_OBSTACLES = ['🚧', '🪨', '🛢️', '🌵'];
+
+class RaceGame extends GameBase {
+  constructor(app) {
+    super(app);
+    this.timeLeft = 90;
+    this.lives = this.twoPlayer ? null : 3;
+    this.title = 'حرّك جسمك يمين ويسار لقيادة العربية!';
+    this.kartW = Math.min(110, this.W * (this.twoPlayer ? .11 : .13));
+    this.kartY = 0;
+    this.flashT = 0;
+    if (this.twoPlayer) {
+      this.bptr = [null, null]; this.bptrT = [0, 0];
+    } else {
+      this.pointerX = null; this.ptrT = 0;
+    }
+    const W = this.W;
+    this.roads = [];
+    const mkRoad = (x0, x1, side) => this.roads.push({
+      x0, x1, side, kartX: (x0 + x1) / 2, lean: 0, prevX: (x0 + x1) / 2,
+      inv: 0, boost: 0, scroll: 0, dist: 0, items: [], spawnT: .7
+    });
+    if (this.twoPlayer) {
+      mkRoad(W * .04, W / 2 - W * .025, 0);
+      mkRoad(W / 2 + W * .025, W * .96, 1);
+    } else {
+      mkRoad(W * .08, W * .92, 0);
+    }
+  }
+
+  onPointerMove(x) {
+    if (this.twoPlayer) {
+      const s = x < this.W / 2 ? 0 : 1;
+      this.bptr[s] = x; this.bptrT[s] = performance.now();
+    } else {
+      this.pointerX = x; this.ptrT = performance.now();
+    }
+  }
+  onPointerDown(x) { this.onPointerMove(x); }
+
+  /* هدف القيادة: الكاميرا أساساً، والماوس يتقدم مؤقتاً (نفس منطق السلة) */
+  kartTarget(r, now) {
+    const lo = r.x0 + this.kartW / 2, hi = r.x1 - this.kartW / 2;
+    const clamp = v => Math.max(lo, Math.min(hi, v));
+    const eng = this.app.engine;
+    if (this.app.demoMode) {
+      if (this.twoPlayer) return this.bptr[r.side] !== null ? clamp(this.bptr[r.side]) : r.kartX;
+      return this.pointerX !== null ? clamp(this.pointerX) : r.kartX;
+    }
+    if (this.twoPlayer) {
+      const fresh = this.bptr[r.side] !== null && now - this.bptrT[r.side] < 1800;
+      if (fresh) return clamp(this.bptr[r.side]);
+      if (r.side === 0 && eng && eng.hasTrackL) return clamp(eng.cxL * this.W);
+      if (r.side === 1 && eng && eng.hasTrackR) return clamp(eng.cxR * this.W);
+      return r.kartX;
+    }
+    const ptrFresh = this.pointerX !== null && now - this.ptrT < 1800;
+    if (ptrFresh) return clamp(this.pointerX);
+    if (eng && eng.hasTrack) return clamp(eng.cx * this.W);
+    return r.kartX;
+  }
+
+  update(dt) {
+    this.baseUpdate(dt);
+    const now = performance.now();
+    this.kartY = this.H - 120;
+    const prog = Math.min(1, this.elapsed / 90);
+    const baseSpeed = 300 + 400 * prog;
+
+    for (const r of this.roads) {
+      const speed = baseSpeed * (r.boost > 0 ? 1.6 : 1) * (r.inv > 0 ? .7 : 1);
+
+      // القيادة + ميل العربية مع الحركة
+      const t = this.kartTarget(r, now);
+      const oldX = r.kartX;
+      r.kartX += (t - r.kartX) * Math.min(1, dt * 7);
+      const vx = (r.kartX - oldX) / Math.max(dt, .001);
+      r.lean += (Math.max(-.35, Math.min(.35, vx / 1100)) - r.lean) * .15;
+
+      // المسافة تتحول نقاط (ضعفية أثناء التعزيز)
+      r.scroll += speed * dt; r.dist += speed * dt;
+      if (r.dist >= 30) {
+        r.dist -= 30;
+        const pts = r.boost > 0 ? 2 : 1;
+        if (this.twoPlayer) { if (r.side === 0) this.scoreA += pts; else this.scoreB += pts; }
+        else this.score += pts;
+        this.app.hudUpdate(this);
+      }
+      if (r.inv > 0) r.inv -= dt;
+      if (r.boost > 0) r.boost -= dt;
+
+      // توليد الأغراض
+      r.spawnT -= dt;
+      if (r.spawnT <= 0) {
+        const roll = Math.random();
+        let type = 'obstacle', emoji = R_OBSTACLES[(Math.random() * R_OBSTACLES.length) | 0];
+        if (roll < .20) { type = 'star'; emoji = '⭐'; }
+        else if (roll < .28) { type = 'gem'; emoji = '💎'; }
+        else if (roll < .35) { type = 'rocket'; emoji = '🚀'; }
+        const iw = 60;
+        r.items.push({
+          x: r.x0 + iw / 2 + Math.random() * (r.x1 - r.x0 - iw),
+          y: -70, type, emoji, rot: 0, vr: (Math.random() - .5) * 2
+        });
+        r.spawnT = Math.max(.32, .75 - prog * .35) + Math.random() * .25;
+      }
+
+      // حركة وتصادم
+      const half = this.kartW / 2 + 22;
+      for (const it of r.items) {
+        it.y += speed * dt; it.rot += it.vr * dt;
+        if (it.y > this.kartY - 45 && it.y < this.kartY + 35 && Math.abs(it.x - r.kartX) < half) {
+          it.dead = true;
+          if (it.type === 'obstacle') {
+            if (r.inv <= 0) {
+              this.shakeT = .45; this.flashT = .5;
+              SFX.bomb();
+              this.particles.burst(it.x, it.y, ['#ef4444', '#f97316', '#7f1d1d'], 20);
+              this.texts.add(it.x, it.y - 30, '💥', '#ef4444');
+              r.inv = 1.6; r.boost = 0;
+              if (this.twoPlayer) {
+                if (r.side === 0) this.scoreA = Math.max(0, this.scoreA - 20);
+                else this.scoreB = Math.max(0, this.scoreB - 20);
+                this.texts.add(it.x, it.y - 70, P_EMojis[r.side] + ' -20', P_COLORS[r.side]);
+                this.app.hudUpdate(this);
+              } else {
+                this.lives--;
+                this.app.hudUpdate(this);
+                if (this.lives <= 0) { this.endGame(); return; }
+              }
+            }
+          } else if (it.type === 'star') {
+            if (this.twoPlayer) this.addScoreP(r.side, 10, it.x, it.y);
+            else this.addScore(10, it.x, it.y, '#fde047');
+            SFX.catchFruit();
+            this.particles.burst(it.x, it.y, ['#fde047', '#fff'], 10, 200);
+          } else if (it.type === 'gem') {
+            if (this.twoPlayer) this.addScoreP(r.side, 25, it.x, it.y);
+            else this.addScore(25, it.x, it.y, '#67e8f9');
+            SFX.golden();
+            this.particles.burst(it.x, it.y, ['#67e8f9', '#fff', '#a5f3fc'], 14);
+          } else if (it.type === 'rocket') {
+            r.boost = 3;
+            SFX.go();
+            this.texts.add(it.x, it.y - 20, '🚀 سرعة!', '#fb923c');
+          }
+        }
+        if (it.y > this.H + 90) it.dead = true;
+      }
+      r.items = r.items.filter(it => !it.dead);
+    }
+    if (this.flashT > 0) this.flashT -= dt;
+  }
+
+  draw(ctx) {
+    this.baseDraw(ctx);
+    for (const r of this.roads) {
+      // الطريق
+      ctx.fillStyle = 'rgba(35,38,52,.78)';
+      ctx.fillRect(r.x0, 60, r.x1 - r.x0, this.H - 60);
+      ctx.fillStyle = 'rgba(255,255,255,.75)';
+      ctx.fillRect(r.x0, 60, 6, this.H - 60);
+      ctx.fillRect(r.x1 - 6, 60, 6, this.H - 60);
+      // خطوط الحارات المتحركة (إحساس السرعة)
+      const dashH = 46, gap = 34, period = dashH + gap;
+      const off = r.scroll % period;
+      ctx.fillStyle = 'rgba(255,255,255,.5)';
+      for (let li = 1; li < 3; li++) {
+        const lx = r.x0 + (r.x1 - r.x0) * li / 3;
+        for (let y = 60 + period - off; y < this.H; y += period)
+          ctx.fillRect(lx - 3, y, 6, dashH);
+      }
+      // الأغراض
+      for (const it of r.items) {
+        ctx.save();
+        ctx.translate(it.x, it.y); ctx.rotate(it.rot);
+        ctx.font = '56px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 8;
+        ctx.fillText(it.emoji, 0, 0);
+        ctx.restore();
+      }
+      // العربية (تومض أثناء المناعة، ولهب أثناء التعزيز)
+      if (r.boost > 0) {
+        ctx.save();
+        ctx.font = `${this.kartW * .55}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('🔥', r.kartX, this.kartY + this.kartW * .5);
+        ctx.restore();
+      }
+      ctx.save();
+      ctx.translate(r.kartX, this.kartY);
+      ctx.rotate(Math.PI / 2 + r.lean); // 🏎️ يواجه اليسار أصلاً → تدوير للأعلى + ميل القيادة
+      if (r.inv > 0) ctx.globalAlpha = .5 + .4 * Math.sin(this.elapsed * 25);
+      ctx.font = `${this.kartW}px serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 12;
+      ctx.fillText('🏎️', 0, 0);
+      ctx.restore();
+      // شعار اللاعب فوق عربيته (وضع اللاعبَين)
+      if (this.twoPlayer) {
+        ctx.font = '700 24px "Segoe UI", Arial';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.fillStyle = P_COLORS[r.side];
+        ctx.fillText(P_EMojis[r.side], r.kartX, this.kartY - this.kartW * .62);
+      }
+    }
+    // وميض أحمر عند الاصطدام
+    if (this.flashT > 0) {
+      ctx.fillStyle = `rgba(239,68,68,${this.flashT * .5})`;
+      ctx.fillRect(-40, -40, this.W + 80, this.H + 80);
+    }
+  }
+}
+
 /* تعريفات الألعاب للقائمة */
 const GAMES = {
   pop:   { cls: PopGame,   name: 'اضرب الكرات',   icon: '🎈', stars: [50, 120, 200], dur: 60 },
   catch: { cls: CatchGame, name: 'اصطياد الفواكه', icon: '🍎', stars: [150, 350, 600], dur: 90 },
-  whack: { cls: WhackGame, name: 'اضرب الخُلد',    icon: '🐹', stars: [60, 130, 220], dur: 60 }
+  whack: { cls: WhackGame, name: 'اضرب الخُلد',    icon: '🐹', stars: [60, 130, 220], dur: 60 },
+  race:  { cls: RaceGame,  name: 'سباق السيارات',  icon: '🚗', stars: [1500, 3000, 4500], dur: 90 }
 };
