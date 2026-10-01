@@ -681,7 +681,7 @@ class WhackGame extends GameBase {
    الطفل يحرك جسمه يمين/يسار لقيادة العربية، يتفادى العوائق
    ويجمع النجوم والجواهر وصواريخ السرعة
    ============================================================ */
-const R_OBSTACLES = ['🚧', '🪨', '🛢️', '🌵'];
+const R_OBSTACLES = ['🚧', '🌑', '🛢️', '🌵'];
 
 class RaceGame extends GameBase {
   constructor(app) {
@@ -897,7 +897,7 @@ class RaceGame extends GameBase {
    اللعبة 5: التنين الطاير 🐉 (مثل Flying Dragon على LeapMove)
    تحكم ببعدين: جسم يمين/يسار + فوق/تحت — اجمع الجواهر واعبر الحلقات
    ============================================================ */
-const D_OBSTACLES = ['🪨', '⛈️', '🦅', '🌵'];
+const D_OBSTACLES = ['🌑', '⛈️', '🦅', '🌵'];
 
 class DragonGame extends GameBase {
   constructor(app) {
@@ -1368,7 +1368,7 @@ class RunnerGame extends GameBase {
       if (r.spawnT <= 0) {
         const roll = Math.random();
         let it;
-        if (roll < .38) it = { type: 'log', emoji: '🪵', y: this.groundY - 55 };
+        if (roll < .38) it = { type: 'log', emoji: '🛢️', y: this.groundY - 55 };
         else if (roll < .68) it = { type: 'vine', emoji: '🌿', y: 135 };
         else if (roll < .88) it = { type: 'banana', emoji: '🍌', y: this.H * .3 + Math.random() * (this.groundY - 90 - this.H * .3) };
         else it = { type: 'gem', emoji: '💎', y: this.H * .3 + Math.random() * (this.groundY - 90 - this.H * .3) };
@@ -1461,7 +1461,7 @@ class RunnerGame extends GameBase {
    الكاميرا خلف التنين — الأشياء تأتي من بعيد وتكبر وتقترب
    (إسقاط منظوري حقيقي: s = FOV/z على كانفس 2D بدون مكتبات)
    ============================================================ */
-const SP_OBSTACLES = ['🪨', '☄️', '🛸', '🌀'];
+const SP_OBSTACLES = ['🌑', '☄️', '🛸', '🌀']; // 🌑 بدل 🪨 (توافق أوسع مع الأجهزة القديمة)
 
 class Dragon3DGame extends GameBase {
   constructor(app) {
@@ -1751,6 +1751,536 @@ class Dragon3DGame extends GameBase {
   }
 }
 
+/* ============================================================
+   اللعبة 10: سباق 3D 🏎️ — الكاميرا خلف العربية، طريق بمنظور
+   حقيقي والعوائق تأتي من الأفق وتكبر
+   ============================================================ */
+class Race3DGame extends GameBase {
+  constructor(app) {
+    super(app);
+    this.timeLeft = 90;
+    this.lives = this.twoPlayer ? null : 3;
+    this.title = 'حرّك جسمك لقيادة العربية!';
+    this.FOV = 420; this.FAR = 3000;
+    this.GW = -0.55;                    // ارتفاع مستوى الأرض بالعالم
+    this.DZ = 118;                      // مستوى العربية (زمن التصادم)
+    this.carY = this.H - 150;
+    this.flashT = 0;
+    this.views = [];
+    const W = this.W, H = this.H;
+    const mk = (vx, vw, side) => this.views.push({
+      vx, vw, side, cx0: vx + vw / 2,
+      sx: vx + vw / 2, px: 0, bank: 0, inv: 0, boost: 0,
+      dist: 0, scroll: 0, items: [], spawnT: .6, trailT: 0
+    });
+    if (this.twoPlayer) { mk(0, W / 2, 0); mk(W / 2, W / 2, 1); }
+    else mk(0, W, 0);
+  }
+  proj(v, wx, wy, wz) {
+    const s = this.FOV / Math.max(wz, 40);
+    return { x: v.cx0 + (wx - v.px * .4) * s * 100, y: this.H * .52 + (wy) * s * 100, s };
+  }
+  update(dt) {
+    this.baseUpdate(dt);
+    const now = performance.now();
+    const prog = Math.min(1, this.elapsed / 90);
+    const baseSpeed = 320 + 300 * prog;
+    for (const v of this.views) {
+      const speed = baseSpeed * (v.boost > 0 ? 1.55 : 1) * (v.inv > 0 ? .75 : 1);
+      const zone = { x0: v.vx + v.vw * .1, x1: v.vx + v.vw * .9, y0: 80, y1: this.H - 100 };
+      const tgt = this.bodyTarget(this.twoPlayer ? v.side : null, now, { x: v.sx, y: 0 }, zone);
+      v.sx += (tgt.x - v.sx) * Math.min(1, dt * 6);
+      v.px += (Math.max(-1.05, Math.min(1.05, (v.sx - v.cx0) / (v.vw * .45))) - v.px) * Math.min(1, dt * 6);
+      v.bank += (Math.max(-.4, Math.min(.4, (tgt.x - v.sx) / (v.vw * .3))) - v.bank) * .12;
+
+      v.scroll += speed * dt; v.dist += speed * dt;
+      if (v.dist >= 40) {
+        v.dist -= 40;
+        const pts = v.boost > 0 ? 2 : 1;
+        if (this.twoPlayer) { if (v.side === 0) this.scoreA += pts; else this.scoreB += pts; }
+        else this.score += pts;
+      }
+      if (v.inv > 0) v.inv -= dt;
+      if (v.boost > 0) v.boost -= dt;
+
+      // لهب التعزيز
+      if (v.boost > 0) {
+        v.trailT += dt;
+        if (v.trailT > .05) {
+          v.trailT = 0;
+          this.particles.list.push({
+            x: v.sx + (Math.random() - .5) * 50, y: this.carY + 30,
+            vx: (Math.random() - .5) * 80, vy: 150 + Math.random() * 100,
+            r: 3 + Math.random() * 5, life: .35, age: 0, grav: 0,
+            color: ['#fb923c', '#fbbf24', '#f87171'][(Math.random() * 3) | 0]
+          });
+        }
+      }
+
+      v.spawnT -= dt;
+      if (v.spawnT <= 0) {
+        const roll = Math.random();
+        let type = 'obstacle', emoji = ['🚧', '🌑', '🛢️'][(Math.random() * 3) | 0];
+        if (roll < .15) { type = 'star'; emoji = '⭐'; }
+        else if (roll < .27) { type = 'gem'; emoji = '💎'; }
+        else if (roll < .37) { type = 'rocket'; emoji = '🚀'; }
+        else if (roll < .42) { type = 'heart'; emoji = '❤️'; }
+        v.items.push({ x: (Math.random() - .5) * 2, z: this.FAR, type, emoji, resolved: false });
+        v.spawnT = Math.max(.3, .58 - prog * .26) + Math.random() * .22;
+      }
+
+      for (const it of v.items) {
+        it.z -= speed * dt;
+        if (!it.resolved && it.z <= this.DZ) {
+          it.resolved = true;
+          const dx = Math.abs(it.x - v.px);
+          const p = this.proj(v, it.x, this.GW + .42, this.DZ);
+          const fx = Math.max(v.vx + 30, Math.min(v.vx + v.vw - 30, p.x));
+          const fy = Math.max(60, Math.min(this.H - 40, p.y));
+          if (it.type === 'obstacle') {
+            if (dx < .45 && v.inv <= 0) {
+              v.inv = 1.6; this.shakeT = .45; this.flashT = .5;
+              SFX.bomb();
+              this.particles.burst(fx, fy, ['#ef4444', '#f97316'], 18);
+              if (this.twoPlayer) {
+                if (v.side === 0) this.scoreA = Math.max(0, this.scoreA - 20);
+                else this.scoreB = Math.max(0, this.scoreB - 20);
+                this.texts.add(fx, fy - 40, P_EMojis[v.side] + ' -20', P_COLORS[v.side]);
+                this.app.hudUpdate(this);
+              } else {
+                this.lives--;
+                this.app.hudUpdate(this);
+                if (this.lives <= 0) { this.endGame(); return; }
+              }
+            }
+          } else if (dx < .45) {
+            if (it.type === 'rocket') {
+              v.boost = 3; SFX.go();
+              this.texts.add(fx, fy - 20, '🚀', '#fb923c');
+            } else if (it.type === 'heart') {
+              SFX.catchFruit();
+              if (!this.twoPlayer && this.lives < 3) { this.lives++; this.app.hudUpdate(this); this.texts.add(fx, fy, '❤️+', '#fda4af'); }
+              else if (this.twoPlayer) this.addScoreP(v.side, 15, fx, fy);
+              else this.addScore(15, fx, fy, '#fda4af');
+            } else {
+              const pts = it.type === 'star' ? 25 : 10;
+              if (this.twoPlayer) this.addScoreP(v.side, pts, fx, fy);
+              else this.addScore(pts, fx, fy, it.type === 'star' ? '#fbbf24' : '#67e8f9');
+              if (it.type === 'star') SFX.golden(); else SFX.catchFruit();
+              this.particles.burst(fx, fy, ['#67e8f9', '#fff'], 10, 200);
+            }
+          }
+        }
+        if (it.z < 80) it.dead = true;
+      }
+      v.items = v.items.filter(it => !it.dead);
+    }
+    if (this.flashT > 0) this.flashT -= dt;
+  }
+  draw(ctx) {
+    const W = this.W, H = this.H;
+    ctx.clearRect(0, 0, W, H);
+    if (this.shakeT > 0) {
+      const m = this.shakeT * 30;
+      ctx.translate((Math.random() - .5) * m, (Math.random() - .5) * m);
+    }
+    for (const v of this.views) {
+      // سماء + عشب
+      const sky = ctx.createLinearGradient(0, 0, 0, H * .52);
+      sky.addColorStop(0, 'rgba(88,28,135,.8)');
+      sky.addColorStop(1, 'rgba(30,27,75,.7)');
+      ctx.fillStyle = sky;
+      ctx.fillRect(v.vx - 4, -40, v.vw + 8, H * .52 + 40);
+      ctx.fillStyle = 'rgba(20,83,45,.85)';
+      ctx.fillRect(v.vx - 4, H * .52, v.vw + 8, H * .48 + 40);
+
+      // الطريق (شبه منحرف بمنظور)
+      const nearL = this.proj(v, -1.15, this.GW, 85), nearR = this.proj(v, 1.15, this.GW, 85);
+      const farL = this.proj(v, -1.15, this.GW, this.FAR), farR = this.proj(v, 1.15, this.GW, this.FAR);
+      ctx.fillStyle = 'rgba(64,64,76,.92)';
+      ctx.beginPath();
+      ctx.moveTo(farL.x, farL.y); ctx.lineTo(farR.x, farR.y);
+      ctx.lineTo(nearR.x, nearR.y); ctx.lineTo(nearL.x, nearL.y);
+      ctx.closePath(); ctx.fill();
+
+      // خط منقط بالوسط + حواف حمراء/بيضاء
+      const period = 240, dash = 120, off = v.scroll % period;
+      for (let z = off; z < this.FAR; z += period) {
+        if (z < 90) continue;
+        const a = this.proj(v, -.05, this.GW + .01, z), b = this.proj(v, .05, this.GW + .01, z);
+        const c = this.proj(v, .05, this.GW + .01, z + dash), d = this.proj(v, -.05, this.GW + .01, z + dash);
+        ctx.fillStyle = 'rgba(255,255,255,.65)';
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.closePath(); ctx.fill();
+        // كرابات الحواف
+        for (const ex of [-1.15, 1.12]) {
+          const e1 = this.proj(v, ex, this.GW + .01, z), e2 = this.proj(v, ex + .07, this.GW + .01, z);
+          const e3 = this.proj(v, ex + .07, this.GW + .01, z + dash * .8), e4 = this.proj(v, ex, this.GW + .01, z + dash * .8);
+          ctx.fillStyle = (Math.floor((z - off) / period) % 2) ? 'rgba(239,68,68,.8)' : 'rgba(255,255,255,.8)';
+          ctx.beginPath(); ctx.moveTo(e1.x, e1.y); ctx.lineTo(e2.x, e2.y); ctx.lineTo(e3.x, e3.y); ctx.lineTo(e4.x, e4.y); ctx.closePath(); ctx.fill();
+        }
+      }
+
+      // الأغراض (من البعيد للقريب)
+      const sorted = [...v.items].sort((a, b) => b.z - a.z);
+      for (const it of sorted) {
+        const p = this.proj(v, it.x, this.GW + .42, it.z);
+        if (p.x < v.vx - 150 || p.x > v.vx + v.vw + 150) continue;
+        ctx.save();
+        ctx.font = `${Math.max(11, Math.min(150, Math.round(80 * p.s)))}px serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 6;
+        ctx.fillText(it.emoji, p.x, p.y);
+        ctx.restore();
+      }
+
+      this.drawCarBack(ctx, v);
+    }
+    this.particles.draw(ctx);
+    this.texts.draw(ctx);
+    if (this.twoPlayer) this.drawDivider(ctx);
+    if (this.flashT > 0) {
+      ctx.fillStyle = `rgba(239,68,68,${this.flashT * .45})`;
+      ctx.fillRect(-40, -40, W + 80, H + 80);
+    }
+  }
+  /* العربية من الخلف: هيكل + زجاج خلفي + مصابيح حمراء متوهجة */
+  drawCarBack(ctx, v) {
+    const bounce = Math.sin(this.elapsed * 22) * 2;
+    const S = Math.min(v.vw * .16, 115) / 100;
+    ctx.save();
+    ctx.translate(v.sx, this.carY + bounce);
+    ctx.rotate(v.bank * .5);
+    ctx.scale(S, S);
+    if (v.inv > 0) ctx.globalAlpha = .5 + .4 * Math.sin(this.elapsed * 25);
+    // عجلات
+    ctx.fillStyle = '#111';
+    for (const wx of [-52, 52]) {
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(wx - 14, -18, 28, 62, 8) : ctx.rect(wx - 14, -18, 28, 62); ctx.fill();
+    }
+    // الهيكل
+    const bodyG = ctx.createLinearGradient(0, -45, 0, 40);
+    bodyG.addColorStop(0, '#f43f5e'); bodyG.addColorStop(1, '#9f1239');
+    ctx.fillStyle = bodyG;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(-58, -40, 116, 86, 20) : ctx.rect(-58, -40, 116, 86);
+    ctx.fill();
+    // الزجاج الخلفي
+    ctx.fillStyle = 'rgba(15,23,42,.9)';
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(-40, -30, 80, 34, 10) : ctx.rect(-40, -30, 80, 34);
+    ctx.fill();
+    // مصابيح حمراء متوهجة
+    ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 18;
+    ctx.fillStyle = '#ef4444';
+    for (const lx of [-44, 44]) {
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(lx - 12, 8, 24, 12, 6) : ctx.rect(lx - 12, 8, 24, 12);
+      ctx.fill();
+    }
+    ctx.restore();
+    if (this.twoPlayer) {
+      ctx.font = '700 24px "Segoe UI", Arial';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillStyle = P_COLORS[v.side];
+      ctx.fillText(P_EMojis[v.side], v.sx, this.carY - 60 * S);
+    }
+  }
+}
+
+/* ============================================================
+   اللعبة 11: عدّاء الشوارع 3D 🏙️ (بأسلوب Subway Surfers)
+   3 حارات متوازية — بدّل بينها بجسمك يمين/يسار
+   القفز: أي قفزة صغيرة = قفزة كاملة فوق الحاجز
+   الانبطاح: انزل بجسمك للمرور تحت الحاجز العلوي
+   ============================================================ */
+const SUB_LANES = [-0.72, 0, 0.72];
+
+class Runner3DGame extends GameBase {
+  constructor(app) {
+    super(app);
+    this.timeLeft = 90;
+    this.lives = this.twoPlayer ? null : 3;
+    this.title = 'اقفز، انبطح، وبدّل الحارة!';
+    this.FOV = 420; this.FAR = 3000;
+    this.GW = -0.55;
+    this.DZ = 118;
+    this.chY = this.H - 150;
+    this.JUMP_DUR = 0.72;
+    this.DUCK_DUR = 0.8;
+    this.flashT = 0;
+    this.views = [];
+    const W = this.W, H = this.H;
+    const mk = (vx, vw, side) => this.views.push({
+      vx, vw, side, cx0: vx + vw / 2,
+      sx: vx + vw / 2, sy: H * .6,
+      lane: 1, px: 0, jumpT: -1, duckT: -1, inv: 0,
+      dist: 0, scroll: 0, items: [], spawnT: .7,
+      cyHist: []
+    });
+    if (this.twoPlayer) { mk(0, W / 2, 0); mk(W / 2, W / 2, 1); }
+    else mk(0, W, 0);
+  }
+  proj(v, wx, wy, wz) {
+    const s = this.FOV / Math.max(wz, 40);
+    return { x: v.cx0 + (wx - v.px * .35) * s * 100, y: this.H * .52 + (wy) * s * 100, s };
+  }
+  startJump(v) { if (v.jumpT < 0 && v.duckT < 0) { v.jumpT = 0; SFX.go(); } }
+  startDuck(v) { if (v.duckT < 0 && v.jumpT < 0) { v.duckT = 0; SFX.tick(); } }
+  update(dt) {
+    this.baseUpdate(dt);
+    const now = performance.now();
+    const prog = Math.min(1, this.elapsed / 90);
+    const speed = 340 + 300 * prog;
+    const eng = this.app.demoMode ? null : this.app.engine;
+    for (const v of this.views) {
+      const zone = { x0: v.vx + v.vw * .08, x1: v.vx + v.vw * .92, y0: 70, y1: this.H - 90 };
+      const tgt = this.bodyTarget(this.twoPlayer ? v.side : null, now, { x: v.sx, y: v.sy }, zone);
+      v.sx += (tgt.x - v.sx) * Math.min(1, dt * 6);
+      v.sy += (tgt.y - v.sy) * Math.min(1, dt * 4);
+
+      // تبديل الحارة: بالموضع الأفقي (منطق منفصل وليس تتبعاً مطابقاً)
+      const rel = (v.sx - v.vx) / v.vw;
+      const desired = rel < .38 ? 0 : rel > .62 ? 2 : 1;
+      if (desired !== v.lane) { v.lane = desired; SFX.click(); }
+      v.px += (SUB_LANES[v.lane] - v.px) * Math.min(1, dt * 9);
+
+      // كشف القفز/الانبطاح: حركة مركز الجسم العمودية
+      if (eng) {
+        const cy = this.twoPlayer ? (v.side === 0 ? eng.cyL : eng.cyR) : eng.cy;
+        v.cyHist.push({ t: now, cy });
+        while (v.cyHist.length && now - v.cyHist[0].t > 450) v.cyHist.shift();
+        const old = v.cyHist.find(s => now - s.t >= 240);
+        if (old && eng.motionLevel > .01) {
+          const d = cy - old.cy;
+          if (d < -0.035) this.startJump(v);       // الجسم طار فوق (قفزة صغيرة تكفي لقفزة كاملة)
+          else if (d > 0.045) this.startDuck(v);   // الجسم نزل (انبطاح)
+        }
+      } else {
+        // بالماوس: الثلث الأعلى = قفز، الأسفل = انبطاح
+        const ry = v.sy / this.H;
+        if (ry < .3) this.startJump(v);
+        else if (ry > .75) this.startDuck(v);
+      }
+      if (v.jumpT >= 0) { v.jumpT += dt; if (v.jumpT > this.JUMP_DUR) v.jumpT = -1; }
+      if (v.duckT >= 0) { v.duckT += dt; if (v.duckT > this.DUCK_DUR) v.duckT = -1; }
+      const yOff = v.jumpT >= 0 ? Math.sin(Math.PI * Math.min(1, v.jumpT / this.JUMP_DUR)) * .62 : 0;
+
+      v.scroll += speed * dt; v.dist += speed * dt;
+      if (v.dist >= 40) {
+        v.dist -= 40;
+        if (this.twoPlayer) { if (v.side === 0) this.scoreA++; else this.scoreB++; }
+        else this.score++;
+      }
+      if (v.inv > 0) v.inv -= dt;
+
+      // توليد: حاجز منخفض (اقفز) / علوي (انبطح) / جدار (بدّل الحارة) / جوائز
+      v.spawnT -= dt;
+      if (v.spawnT <= 0) {
+        const roll = Math.random();
+        const lane = (Math.random() * 3) | 0;
+        let it;
+        if (roll < .30) it = { type: 'low', lane };
+        else if (roll < .52) it = { type: 'high', lane };
+        else if (roll < .68) it = { type: 'wall', lane };
+        else if (roll < .88) it = { type: 'gem', lane };
+        else it = { type: 'star', lane };
+        it.z = this.FAR; it.resolved = false;
+        // أحياناً جدار ثانٍ بحارة أخرى (تبقى حارة حرة دائماً)
+        if (it.type === 'wall' && Math.random() < .35) {
+          const lane2 = (lane + 1 + ((Math.random() * 2) | 0)) % 3;
+          v.items.push({ type: 'wall', lane: lane2, z: this.FAR + 120, resolved: false });
+        }
+        v.items.push(it);
+        v.spawnT = Math.max(.4, .78 - prog * .3) + Math.random() * .25;
+      }
+
+      for (const it of v.items) {
+        it.z -= speed * dt;
+        if (!it.resolved && it.z <= this.DZ) {
+          it.resolved = true;
+          const p = this.proj(v, SUB_LANES[it.lane], this.GW + .3, this.DZ);
+          const fx = Math.max(v.vx + 30, Math.min(v.vx + v.vw - 30, p.x));
+          const fy = Math.max(60, Math.min(this.H - 40, p.y));
+          if (it.lane === v.lane) {
+            if (it.type === 'low') {
+              if (yOff > .3) { this.particles.burst(fx, fy, ['#fde047', '#fff'], 8, 160); }
+              else this.crash(v, fx, fy);
+            } else if (it.type === 'high') {
+              if (v.duckT >= 0) { this.particles.burst(fx, fy, ['#a5f3fc', '#fff'], 8, 160); }
+              else this.crash(v, fx, fy);
+            } else if (it.type === 'wall') {
+              this.crash(v, fx, fy);
+            } else {
+              const pts = it.type === 'star' ? 25 : 10;
+              if (this.twoPlayer) this.addScoreP(v.side, pts, fx, fy);
+              else this.addScore(pts, fx, fy, it.type === 'star' ? '#fbbf24' : '#67e8f9');
+              if (it.type === 'star') SFX.golden(); else SFX.catchFruit();
+              this.particles.burst(fx, fy, ['#67e8f9', '#fff'], 8, 180);
+            }
+          }
+        }
+        if (it.z < 80) it.dead = true;
+      }
+      v.items = v.items.filter(it => !it.dead);
+      if (this.ended) return;
+    }
+    if (this.flashT > 0) this.flashT -= dt;
+  }
+  crash(v, fx, fy) {
+    if (v.inv > 0) return;
+    v.inv = 1.6; this.shakeT = .45; this.flashT = .5;
+    SFX.bomb();
+    this.particles.burst(fx, fy, ['#ef4444', '#f97316'], 18);
+    if (this.twoPlayer) {
+      if (v.side === 0) this.scoreA = Math.max(0, this.scoreA - 20);
+      else this.scoreB = Math.max(0, this.scoreB - 20);
+      this.texts.add(fx, fy - 40, P_EMojis[v.side] + ' -20', P_COLORS[v.side]);
+      this.app.hudUpdate(this);
+    } else {
+      this.lives--;
+      this.app.hudUpdate(this);
+      if (this.lives <= 0) { this.endGame(); return; }
+    }
+  }
+  /* حاجز مرسوم بين نقطتي عمق بأي ارتفاعين */
+  drawBarrier(ctx, v, lane, y0, y1, z, color, stripe) {
+    const wx = SUB_LANES[lane], hw = .3;
+    const a = this.proj(v, wx - hw, this.GW + y1, z), b = this.proj(v, wx + hw, this.GW + y1, z);
+    const c = this.proj(v, wx + hw, this.GW + y0, z), d = this.proj(v, wx - hw, this.GW + y0, z);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y);
+    ctx.closePath(); ctx.fill();
+    if (stripe) {
+      ctx.fillStyle = stripe;
+      const n = 4;
+      for (let i = 0; i < n; i += 2) {
+        const t0 = i / n, t1 = (i + 1) / n;
+        ctx.beginPath();
+        ctx.moveTo(a.x + (b.x - a.x) * t0, a.y + (b.y - a.y) * t0);
+        ctx.lineTo(a.x + (b.x - a.x) * t1, a.y + (b.y - a.y) * t1);
+        ctx.lineTo(c.x + (d.x - c.x) * t1, c.y + (d.y - c.y) * t1);
+        ctx.lineTo(c.x + (d.x - c.x) * t0, c.y + (d.y - c.y) * t0);
+        ctx.closePath(); ctx.fill();
+      }
+    }
+  }
+  draw(ctx) {
+    const W = this.W, H = this.H;
+    ctx.clearRect(0, 0, W, H);
+    if (this.shakeT > 0) {
+      const m = this.shakeT * 30;
+      ctx.translate((Math.random() - .5) * m, (Math.random() - .5) * m);
+    }
+    for (const v of this.views) {
+      // سماء + أرض المدينة
+      const sky = ctx.createLinearGradient(0, 0, 0, H * .52);
+      sky.addColorStop(0, 'rgba(15,23,42,.85)');
+      sky.addColorStop(1, 'rgba(51,65,85,.7)');
+      ctx.fillStyle = sky;
+      ctx.fillRect(v.vx - 4, -40, v.vw + 8, H * .52 + 40);
+      ctx.fillStyle = 'rgba(30,35,48,.9)';
+      ctx.fillRect(v.vx - 4, H * .52, v.vw + 8, H * .48 + 40);
+
+      // المسارات الثلاثة
+      const nearL = this.proj(v, -1.1, this.GW, 85), nearR = this.proj(v, 1.1, this.GW, 85);
+      const farL = this.proj(v, -1.1, this.GW, this.FAR), farR = this.proj(v, 1.1, this.GW, this.FAR);
+      ctx.fillStyle = 'rgba(55,65,81,.95)';
+      ctx.beginPath();
+      ctx.moveTo(farL.x, farL.y); ctx.lineTo(farR.x, farR.y);
+      ctx.lineTo(nearR.x, nearR.y); ctx.lineTo(nearL.x, nearL.y);
+      ctx.closePath(); ctx.fill();
+      // فواصل الحارات المتقطعة
+      const period = 240, dash = 120, off = v.scroll % period;
+      ctx.fillStyle = 'rgba(255,255,255,.5)';
+      for (const dx of [-0.36, 0.36]) {
+        for (let z = off; z < this.FAR; z += period) {
+          if (z < 90) continue;
+          const a = this.proj(v, dx - .03, this.GW + .01, z), b = this.proj(v, dx + .03, this.GW + .01, z);
+          const c = this.proj(v, dx + .03, this.GW + .01, z + dash), d2 = this.proj(v, dx - .03, this.GW + .01, z + dash);
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d2.x, d2.y); ctx.closePath(); ctx.fill();
+        }
+      }
+
+      // الحواجز والجوائز (من البعيد للقريب)
+      const sorted = [...v.items].sort((a, b) => b.z - a.z);
+      for (const it of sorted) {
+        if (it.type === 'low') {
+          this.drawBarrier(ctx, v, it.lane, 0, .35, it.z, 'rgba(251,191,36,.9)', 'rgba(120,53,15,.9)');
+        } else if (it.type === 'high') {
+          this.drawBarrier(ctx, v, it.lane, .55, 1.15, it.z, 'rgba(148,163,184,.9)', 'rgba(51,65,85,.9)');
+        } else if (it.type === 'wall') {
+          this.drawBarrier(ctx, v, it.lane, 0, 1.15, it.z, 'rgba(220,38,38,.9)', 'rgba(255,255,255,.75)');
+        } else {
+          const p = this.proj(v, SUB_LANES[it.lane], this.GW + .4, it.z);
+          ctx.save();
+          ctx.font = `${Math.max(11, Math.min(120, Math.round(65 * p.s)))}px serif`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(it.type === 'star' ? '⭐' : '💎', p.x, p.y);
+          ctx.restore();
+        }
+      }
+
+      this.drawKidBack(ctx, v);
+    }
+    this.particles.draw(ctx);
+    this.texts.draw(ctx);
+    if (this.twoPlayer) this.drawDivider(ctx);
+    if (this.flashT > 0) {
+      ctx.fillStyle = `rgba(239,68,68,${this.flashT * .45})`;
+      ctx.fillRect(-40, -40, W + 80, H + 80);
+    }
+  }
+  /* الطفل من الخلف: رأس + قميص بألوان اللاعب + أرجل تجري */
+  drawKidBack(ctx, v) {
+    const jumping = v.jumpT >= 0;
+    const ducking = v.duckT >= 0;
+    const yOff = jumping ? Math.sin(Math.PI * Math.min(1, v.jumpT / this.JUMP_DUR)) : 0;
+    const x = v.cx0 + v.px * v.vw * .30;
+    const y = this.chY - yOff * 190;
+    const S = Math.min(v.vw * .13, 92) / 100;
+    const run = Math.sin(this.elapsed * 14);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(S, S * (ducking ? .55 : 1));
+    if (v.inv > 0) ctx.globalAlpha = .5 + .4 * Math.sin(this.elapsed * 25);
+    const shirt = this.twoPlayer ? (v.side === 0 ? '#3b82f6' : '#ef4444') : '#8b5cf6';
+    // الأرجل تجري
+    ctx.fillStyle = '#1e293b';
+    if (jumping) {
+      ctx.fillRect(-16, 26, 13, 20); ctx.fillRect(3, 26, 13, 20);
+    } else {
+      ctx.save(); ctx.translate(-10, 26); ctx.rotate(run * .5); ctx.fillRect(-6, 0, 13, 34); ctx.restore();
+      ctx.save(); ctx.translate(10, 26); ctx.rotate(-run * .5); ctx.fillRect(-7, 0, 13, 34); ctx.restore();
+    }
+    // الجسم
+    ctx.fillStyle = shirt;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(-19, -14, 38, 44, 12) : ctx.rect(-19, -14, 38, 44);
+    ctx.fill();
+    // الأذرع تتأرجح
+    ctx.fillStyle = '#fcd9b6';
+    if (ducking) {
+      ctx.fillRect(-30, -22, 10, 26); ctx.fillRect(20, -22, 10, 26);
+    } else {
+      ctx.save(); ctx.translate(-22, -8); ctx.rotate(-run * .6); ctx.fillRect(-5, 0, 10, 30); ctx.restore();
+      ctx.save(); ctx.translate(22, -8); ctx.rotate(run * .6); ctx.fillRect(-5, 0, 10, 30); ctx.restore();
+    }
+    // الرأس
+    ctx.beginPath(); ctx.arc(0, -32, 16, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#3b2f2f'; // شعر
+    ctx.beginPath(); ctx.arc(0, -36, 16, Math.PI * .95, Math.PI * 2.05); ctx.fill();
+    ctx.restore();
+
+    if (this.twoPlayer) {
+      ctx.font = '700 24px "Segoe UI", Arial';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillStyle = P_COLORS[v.side];
+      ctx.fillText(P_EMojis[v.side], x, y - 60 * S);
+    }
+  }
+}
+
 /* تعريفات الألعاب للقائمة */
 const GAMES = {
   pop:     { cls: PopGame,      name: 'اضرب الكرات',   icon: '🎈', stars: [50, 120, 200], dur: 60 },
@@ -1761,5 +2291,7 @@ const GAMES = {
   dance:   { cls: PoseGame,     name: 'الرقص واللمس',   icon: '🕺', stars: [80, 160, 260], dur: 60 },
   goalie:  { cls: GoalieGame,   name: 'حراسة المرمى',   icon: '🥅', stars: [80, 150, 240], dur: 90 },
   runner:  { cls: RunnerGame,   name: 'عدّي العوائق',   icon: '🏃', stars: [500, 1000, 1600], dur: 90 },
-  space:   { cls: Dragon3DGame, name: 'التنين الفضائي 3D', icon: '🐲', stars: [400, 900, 1500], dur: 90 }
+  space:   { cls: Dragon3DGame, name: 'التنين الفضائي 3D', icon: '🐲', stars: [400, 900, 1500], dur: 90 },
+  race3d:  { cls: Race3DGame,   name: 'سباق 3D',        icon: '🏎️', stars: [1200, 2500, 4000], dur: 90 },
+  subway:  { cls: Runner3DGame, name: 'عدّاء الشوارع 3D', icon: '🏙️', stars: [400, 900, 1500], dur: 90 }
 };
