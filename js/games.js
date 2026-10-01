@@ -305,12 +305,12 @@ class CatchGame extends GameBase {
     // تحريك السلة/السلتين
     if (this.twoPlayer) {
       for (let s = 0; s < 2; s++) {
-        const t = this.basketTarget(s, now);
-        this.bx[s] += (t - this.bx[s]) * Math.min(1, dt * 7);
+        const target = this.basketTarget(s, now);
+        this.bx[s] += (target - this.bx[s]) * Math.min(1, dt * 7);
       }
     } else {
-      const t = this.basketTarget(null, now);
-      this.basketX += (t - this.basketX) * Math.min(1, dt * 7);
+      const target = this.basketTarget(null, now);
+      this.basketX += (target - this.basketX) * Math.min(1, dt * 7);
     }
 
     // إسقاط الأغراض
@@ -628,9 +628,10 @@ class RaceGame extends GameBase {
       const speed = baseSpeed * (r.boost > 0 ? 1.6 : 1) * (r.inv > 0 ? .7 : 1);
 
       // القيادة + ميل العربية مع الحركة
-      const t = this.kartTarget(r, now);
+      // (ملاحظة: الاسم target وليس t — لا تسمّه t لأنه يحجب دالة الترجمة t())
+      const target = this.kartTarget(r, now);
       const oldX = r.kartX;
-      r.kartX += (t - r.kartX) * Math.min(1, dt * 7);
+      r.kartX += (target - r.kartX) * Math.min(1, dt * 7);
       const vx = (r.kartX - oldX) / Math.max(dt, .001);
       r.lean += (Math.max(-.35, Math.min(.35, vx / 1100)) - r.lean) * .15;
 

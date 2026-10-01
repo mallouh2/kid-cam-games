@@ -204,7 +204,11 @@ function step(t) {
   if (t - app.lastT < 8) return; // حماية من الاستدعاء المزدوج
   app.lastT = t;
 
-  if (app.engine) app.engine.update(app.W(), app.H());
+  if (app.engine) {
+    // حارس الكاميرا: بعض المتصفحات توقف البث تلقائياً (توفير طاقة) — استئناف فوري
+    if (app.engine.ready && app.engine.video.paused) app.engine.video.play().catch(() => {});
+    app.engine.update(app.W(), app.H());
+  }
 
   if (app.currentGame && !app.paused) {
     app.currentGame.update(dt);
@@ -220,14 +224,26 @@ function step(t) {
   }
 }
 function loop(t) {
-  step(t);
+  lastRafT = performance.now();
+  // تحصين: أي استثناء في إطار واحد لا يقتل سلسلة rAF نهائياً
+  try { step(t); } catch (e) { console.error('frame error:', e); }
   requestAnimationFrame(loop);
 }
+let lastRafT = 0;
 requestAnimationFrame(loop);
-// شبكة أمان: لو توقف rAF (تبويب خلفي أو متصفح مقيد) نكمل بمؤقت
+// شبكة أمان 1: مؤقت عادي (لو توقف rAF)
 setInterval(() => {
-  if (performance.now() - app.lastT > 200) step(performance.now());
+  if (performance.now() - app.lastT > 200) { try { step(performance.now()); } catch (e) { console.error(e); } }
 }, 100);
+// شبكة أمان 2: عامل خلفي — المتصفحات (خاصة المدمجة) توقف rAF وتخنق المؤقتات،
+// لكن مؤقتات الـ Worker لا تُخنق، فيسوق حلقة اللعبة بسرعة كاملة عندما يتوقف rAF
+try {
+  const workerSrc = 'setInterval(function(){postMessage(0)},16)';
+  const worker = new Worker(URL.createObjectURL(new Blob([workerSrc], { type: 'application/javascript' })));
+  worker.onmessage = () => {
+    if (performance.now() - lastRafT > 250) { try { step(performance.now()); } catch (e) { console.error(e); } }
+  };
+} catch (e) { /* متصفحات قديمة جداً بدون Worker: يكفي المؤقت العادي */ }
 
 /* ---------- اللمس/الماوس ---------- */
 function canvasPos(e) {
