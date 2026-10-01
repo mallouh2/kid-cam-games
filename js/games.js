@@ -2281,6 +2281,293 @@ class Runner3DGame extends GameBase {
   }
 }
 
+/* ============================================================
+   اللعبة 12: سيوف الإيقاع ⚔️ (بأسلوب Beat Saber)
+   كل يد سيف بلونها — الأحمر لليد اليسرى والأزرق لليمنى
+   (الكاميرا المرآة: يسار الشاشة = اليد اليسرى)
+   مكعبات تطير نحوك بالمنظور على إيقاع موسيقى EDM —
+   قطّع المكعب بالسيف الصحيح، وتفادَ القنابل 💣
+   ============================================================ */
+const SABER_COLS = ['#ef4444', '#3b82f6']; // 0=أحمر (يسار)، 1=أزرق (يمين)
+const SABER_ARROWS = [0, Math.PI / 2, Math.PI, -Math.PI / 2, Math.PI / 4, -Math.PI / 4, Math.PI * .75, -Math.PI * .75];
+
+class SaberGame extends GameBase {
+  constructor(app) {
+    super(app);
+    this.timeLeft = 90;
+    this.lives = null;
+    this.title = 'قطّع المكعبات بالسيف الصحيح!';
+    this.FOV = 420; this.FAR = 3400;
+    this.DZ = 170;
+    this.combo = 0;
+    this.energy = 50;
+    this.beatT = 0;
+    this.spb = 60 / MUSIC.bpm;
+    this.flashT = 0;
+    this.views = [];
+    const W = this.W, H = this.H;
+    if (this.twoPlayer) {
+      // كل لاعب سيف واحد بلونه داخل نصفه
+      this.views.push({ vx: 0, vw: W / 2, cx0: W / 4, side: 0,
+        sabers: [{ color: 0, x: W * .25, y: H * .8, trail: [], lastMove: 0 }], blocks: [] });
+      this.views.push({ vx: W / 2, vw: W / 2, cx0: W * .75, side: 1,
+        sabers: [{ color: 1, x: W * .75, y: H * .8, trail: [], lastMove: 0 }], blocks: [] });
+    } else {
+      this.views.push({ vx: 0, vw: W, cx0: W / 2, side: null,
+        sabers: [
+          { color: 0, x: W * .18, y: H * .78, trail: [], lastMove: 0 },
+          { color: 1, x: W * .82, y: H * .78, trail: [], lastMove: 0 }
+        ], blocks: [] });
+    }
+    MUSIC.onHalf = (i) => this.onBeat(i);
+    MUSIC.start();
+  }
+  destroy() { MUSIC.stop(); }
+  /* إطلاق المكعبات متزامناً مع إيقاع الموسيقى (كل نبضة) */
+  onBeat(i) {
+    if (this.ended || i % 2 !== 0) return;
+    const prog = Math.min(1, this.elapsed / 90);
+    for (const v of this.views) {
+      const second = prog > .3 && Math.random() < .25 + prog * .3;
+      const n = second ? 2 : 1;
+      for (let k = 0; k < n; k++) {
+        const isBomb = this.elapsed > 15 && Math.random() < .12;
+        v.blocks.push({
+          x: [-0.55, 0, 0.55][(Math.random() * 3) | 0],
+          y: [-0.18, 0.32][(Math.random() * 2) | 0],
+          z: this.FAR, color: (Math.random() * 2) | 0,
+          bomb: isBomb, resolved: false,
+          arrow: SABER_ARROWS[(Math.random() * SABER_ARROWS.length) | 0]
+        });
+      }
+    }
+  }
+  proj(v, wx, wy, wz) {
+    const s = this.FOV / Math.max(wz, 40);
+    return { x: v.cx0 + wx * s * 100, y: this.H * .5 + wy * s * 100, s };
+  }
+  update(dt) {
+    this.baseUpdate(dt);
+    const now = performance.now();
+    const eng = this.app.demoMode ? null : this.app.engine;
+    this.beatT += dt;
+    if (this.flashT > 0) this.flashT -= dt;
+
+    // تتبع السيوف: نصف الشاشة = اليد المقابل (المرآة)
+    for (const v of this.views) {
+      for (const sb of v.sabers) {
+        const zone = {
+          x0: v.vx + 10, x1: v.vx + v.vw - 10, y0: 80, y1: this.H - 60
+        };
+        const tgt = this.bodyTarget(v.side === null ? sb.color : v.side, now, { x: sb.x, y: sb.y }, zone);
+        const ox = sb.x, oy = sb.y;
+        sb.x += (tgt.x - sb.x) * Math.min(1, dt * 10);
+        sb.y += (tgt.y - sb.y) * Math.min(1, dt * 10);
+        const spd = Math.hypot(sb.x - ox, sb.y - oy) / Math.max(dt, .001);
+        if (spd > 220) sb.lastMove = now;
+        sb.trail.unshift({ x: sb.x, y: sb.y });
+        if (sb.trail.length > 7) sb.trail.pop();
+        // إن سكنت اليد: السيف يعود لموضع الراحة
+        if (now - sb.lastMove > 1600) {
+          const rest = { x: v.vx + v.vw * (sb.color === 0 ? .16 : .84), y: this.H * .8 };
+          sb.x += (rest.x - sb.x) * Math.min(1, dt * 2);
+          sb.y += (rest.y - sb.y) * Math.min(1, dt * 2);
+        }
+      }
+    }
+
+    // المكعبات تطير نحو اللاعب
+    const speed = 1900;
+    for (const v of this.views) {
+      for (const bl of v.blocks) {
+        bl.z -= speed * dt;
+        if (!bl.resolved && bl.z <= this.DZ) {
+          bl.resolved = true;
+          const p = this.proj(v, bl.x, bl.y, this.DZ);
+          // أي سيف يلمس المكعب؟
+          let hitSaber = null;
+          for (const sb of v.sabers) {
+            if (Math.hypot(sb.x - p.x, sb.y - p.y) < 115) { hitSaber = sb; break; }
+          }
+          if (bl.bomb) {
+            if (hitSaber) {
+              this.combo = 0; this.energy = Math.max(0, this.energy - 18);
+              this.shakeT = .45; this.flashT = .5;
+              SFX.bomb();
+              this.particles.burst(p.x, p.y, ['#ef4444', '#f97316', '#7f1d1d'], 22);
+              this.texts.add(p.x, p.y, '💣💥', '#ef4444');
+              this.penalize(v);
+            }
+          } else if (hitSaber) {
+            if (hitSaber.color === bl.color) {
+              // قطعة صحيحة! 🎯
+              this.combo++;
+              this.energy = Math.min(100, this.energy + 8);
+              const mult = Math.min(4, 1 + Math.floor(this.combo / 6));
+              const pts = 10 * mult;
+              if (this.twoPlayer) this.addScoreP(v.side, pts, p.x, p.y);
+              else this.addScore(pts, p.x, p.y, bl.color === 0 ? '#fca5a5' : '#93c5fd');
+              SFX.slice();
+              // نصفي المكعب يتطايران
+              const c = SABER_COLS[bl.color];
+              this.particles.burst(p.x, p.y, [c, '#fff', c], 20);
+              this.particles.list.push({ x: p.x - 30, y: p.y, vx: -260, vy: -60, r: 16, life: .5, age: 0, grav: 500, color: c });
+              this.particles.list.push({ x: p.x + 30, y: p.y, vx: 260, vy: 60, r: 16, life: .5, age: 0, grav: 500, color: c });
+              if (this.combo > 0 && this.combo % 10 === 0) this.texts.add(p.x, p.y - 80, '🔥 x' + this.combo, '#fbbf24');
+            } else {
+              // لون غلط
+              this.combo = 0; this.energy = Math.max(0, this.energy - 12);
+              SFX.lose();
+              this.texts.add(p.x, p.y, '❌', '#f87171');
+              this.penalize(v);
+            }
+          } else {
+            // فوّتها
+            this.combo = 0;
+            this.energy = Math.max(0, this.energy - 10);
+          }
+        }
+        if (bl.z < 80) bl.dead = true;
+      }
+      v.blocks = v.blocks.filter(bl => !bl.dead);
+    }
+  }
+  penalize(v) {
+    if (!this.twoPlayer) { this.score = Math.max(0, this.score - 10); this.app.hudUpdate(this); }
+    else {
+      if (v.side === 0) this.scoreA = Math.max(0, this.scoreA - 10);
+      else this.scoreB = Math.max(0, this.scoreB - 10);
+      this.app.hudUpdate(this);
+    }
+  }
+  draw(ctx) {
+    const W = this.W, H = this.H;
+    ctx.clearRect(0, 0, W, H);
+    if (this.shakeT > 0) {
+      const m = this.shakeT * 30;
+      ctx.translate((Math.random() - .5) * m, (Math.random() - .5) * m);
+    }
+    // خلفية نابضة مع الإيقاع
+    const phase = (this.beatT % this.spb) / this.spb;
+    const pulse = Math.pow(1 - phase, 2.2);
+    const bgG = ctx.createLinearGradient(0, 0, 0, H);
+    bgG.addColorStop(0, 'rgba(30,10,60,.88)');
+    bgG.addColorStop(1, 'rgba(75,15,90,.82)');
+    ctx.fillStyle = bgG;
+    ctx.fillRect(-40, -40, W + 80, H + 80);
+    const glow = ctx.createRadialGradient(W / 2, H * .45, 60, W / 2, H * .45, W * .55);
+    glow.addColorStop(0, `rgba(168,85,247,${.1 + pulse * .16})`);
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(-40, -40, W + 80, H + 80);
+
+    for (const v of this.views) {
+      // خطوط الحارات المتقاربة
+      ctx.strokeStyle = 'rgba(255,255,255,.08)';
+      ctx.lineWidth = 2;
+      for (const lx of [-0.85, -0.28, 0.28, 0.85]) {
+        const f = this.proj(v, lx, .1, this.FAR), n = this.proj(v, lx, -.45, this.DZ);
+        ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(n.x, n.y); ctx.stroke();
+      }
+      // المكعبات (من البعيد للقريب)
+      const sorted = [...v.blocks].sort((a, b) => b.z - a.z);
+      for (const bl of sorted) {
+        const p = this.proj(v, bl.x, bl.y, bl.z);
+        const size = Math.max(14, 66 * p.s);
+        ctx.save();
+        if (bl.bomb) {
+          ctx.font = `${size * 1.2}px serif`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 14 * p.s;
+          ctx.fillText('💣', p.x, p.y);
+        } else {
+          const c = SABER_COLS[bl.color];
+          ctx.shadowColor = c; ctx.shadowBlur = 16 * p.s;
+          ctx.fillStyle = c;
+          ctx.strokeStyle = 'rgba(255,255,255,.85)';
+          ctx.lineWidth = Math.max(2, 5 * p.s);
+          ctx.beginPath();
+          ctx.roundRect ? ctx.roundRect(p.x - size / 2, p.y - size / 2, size, size, size * .18)
+                        : ctx.rect(p.x - size / 2, p.y - size / 2, size, size);
+          ctx.fill(); ctx.stroke();
+          // سهم اتجاه التقطيع
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = '#fff';
+          ctx.translate(p.x, p.y); ctx.rotate(bl.arrow);
+          const a = size * .22;
+          ctx.beginPath();
+          ctx.moveTo(0, -a); ctx.lineTo(a * .75, a * .45); ctx.lineTo(0, a * .05); ctx.lineTo(-a * .75, a * .45);
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+      }
+      // السيوف: أثر + نصل متوهج
+      for (const sb of v.sabers) {
+        const c = SABER_COLS[sb.color];
+        // الأثر
+        for (let k = sb.trail.length - 1; k > 0; k--) {
+          const t0 = sb.trail[k], t1 = sb.trail[k - 1];
+          ctx.globalAlpha = .28 * (1 - k / sb.trail.length);
+          ctx.strokeStyle = c; ctx.lineWidth = 10 * (1 - k / sb.trail.length) + 2;
+          ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(t0.x, t0.y); ctx.lineTo(t1.x, t1.y); ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        // النصل (مائل للخارج قليلاً)
+        const ang = (sb.color === 0 ? -1 : 1) * .28;
+        const len = 150;
+        const ex = sb.x + Math.sin(ang) * len, ey = sb.y - Math.cos(ang) * len;
+        ctx.save();
+        ctx.strokeStyle = c; ctx.lineCap = 'round';
+        ctx.shadowColor = c; ctx.shadowBlur = 26;
+        ctx.lineWidth = 16;
+        ctx.beginPath(); ctx.moveTo(sb.x, sb.y); ctx.lineTo(ex, ey); ctx.stroke();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(sb.x, sb.y); ctx.lineTo(ex, ey); ctx.stroke();
+        // المقبض
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 12;
+        const hx = sb.x - Math.sin(ang) * 26, hy = sb.y + Math.cos(ang) * 26;
+        ctx.beginPath(); ctx.moveTo(sb.x, sb.y); ctx.lineTo(hx, hy); ctx.stroke();
+        ctx.restore();
+        if (this.twoPlayer) {
+          ctx.font = '700 20px "Segoe UI", Arial';
+          ctx.textAlign = 'center'; ctx.fillStyle = c;
+          ctx.fillText(P_EMojis[v.side], sb.x, sb.y + 34);
+        }
+      }
+    }
+    this.particles.draw(ctx);
+    this.texts.draw(ctx);
+    if (this.twoPlayer) this.drawDivider(ctx);
+    // شريط الطاقة + الكومبو
+    const ebW = Math.min(420, W * .4), ebX = W / 2 - ebW / 2, ebY = 64;
+    ctx.fillStyle = 'rgba(0,0,0,.45)';
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(ebX, ebY, ebW, 16, 8) : ctx.rect(ebX, ebY, ebW, 16); ctx.fill();
+    const eg = ctx.createLinearGradient(ebX, 0, ebX + ebW, 0);
+    eg.addColorStop(0, '#f472b6'); eg.addColorStop(1, '#fbbf24');
+    ctx.fillStyle = eg;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(ebX, ebY, Math.max(4, ebW * this.energy / 100), 16, 8)
+                  : ctx.rect(ebX, ebY, Math.max(4, ebW * this.energy / 100), 16);
+    ctx.fill();
+    if (this.combo >= 4) {
+      ctx.font = '900 46px "Segoe UI", Arial';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.globalAlpha = .55 + pulse * .45;
+      ctx.fillStyle = '#fde047';
+      ctx.strokeStyle = 'rgba(0,0,0,.4)'; ctx.lineWidth = 6;
+      ctx.strokeText('x' + this.combo, W / 2, 92);
+      ctx.fillText('x' + this.combo, W / 2, 92);
+      ctx.globalAlpha = 1;
+    }
+    if (this.flashT > 0) {
+      ctx.fillStyle = `rgba(239,68,68,${this.flashT * .4})`;
+      ctx.fillRect(-40, -40, W + 80, H + 80);
+    }
+  }
+}
+
 /* تعريفات الألعاب للقائمة */
 const GAMES = {
   pop:     { cls: PopGame,      name: 'اضرب الكرات',   icon: '🎈', stars: [50, 120, 200], dur: 60 },
@@ -2293,5 +2580,6 @@ const GAMES = {
   runner:  { cls: RunnerGame,   name: 'عدّي العوائق',   icon: '🏃', stars: [500, 1000, 1600], dur: 90 },
   space:   { cls: Dragon3DGame, name: 'التنين الفضائي 3D', icon: '🐲', stars: [400, 900, 1500], dur: 90 },
   race3d:  { cls: Race3DGame,   name: 'سباق 3D',        icon: '🏎️', stars: [1200, 2500, 4000], dur: 90 },
-  subway:  { cls: Runner3DGame, name: 'عدّاء الشوارع 3D', icon: '🏙️', stars: [400, 900, 1500], dur: 90 }
+  subway:  { cls: Runner3DGame, name: 'عدّاء الشوارع 3D', icon: '🏙️', stars: [400, 900, 1500], dur: 90 },
+  saber:   { cls: SaberGame,    name: 'سيوف الإيقاع',    icon: '⚔️', stars: [250, 600, 1100], dur: 90 }
 };

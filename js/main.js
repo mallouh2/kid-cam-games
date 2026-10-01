@@ -138,6 +138,8 @@ async function startGame(key) {
 }
 
 function stopGame() {
+  if (app.currentGame && app.currentGame.destroy) { try { app.currentGame.destroy(); } catch (e) { } }
+  MUSIC.stop();
   app.currentGame = null;
   app.paused = false;
   try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) { }
