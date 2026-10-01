@@ -1456,14 +1456,310 @@ class RunnerGame extends GameBase {
   }
 }
 
+/* ============================================================
+   اللعبة 9: التنين الفضائي 3D 🐲
+   الكاميرا خلف التنين — الأشياء تأتي من بعيد وتكبر وتقترب
+   (إسقاط منظوري حقيقي: s = FOV/z على كانفس 2D بدون مكتبات)
+   ============================================================ */
+const SP_OBSTACLES = ['🪨', '☄️', '🛸', '🌀'];
+
+class Dragon3DGame extends GameBase {
+  constructor(app) {
+    super(app);
+    this.timeLeft = 90;
+    this.lives = this.twoPlayer ? null : 3;
+    this.title = 'طار بالفضاء بجسمك!';
+    this.FOV = 400;        // بعد التركيز
+    this.FAR = 3200;       // مسافة الظهور
+    this.DZ = 240;         // مستوى التنين (z)
+    this.flashT = 0;
+    this.views = [];
+    const W = this.W, H = this.H;
+    const mkView = (vx, vw, side) => {
+      const v = {
+        vx, vw, side, cx0: vx + vw / 2,
+        sx: vx + vw / 2, sy: H * .62,   // موضع التنين على الشاشة (ممَهَّد)
+        px: 0, py: 0, bank: 0, inv: 0,
+        dist: 0, items: [], spawnT: .6, trailT: 0,
+        stars: [],
+        planet: { x: vx + vw * (.2 + Math.random() * .6), y: H * (.12 + Math.random() * .2), r: 40 + Math.random() * 50 }
+      };
+      for (let i = 0; i < 46; i++) v.stars.push(this.newStar());
+      this.views.push(v);
+    };
+    if (this.twoPlayer) { mkView(0, W / 2, 0); mkView(W / 2, W / 2, 1); }
+    else mkView(0, W, 0);
+  }
+  newStar() {
+    return { x: (Math.random() - .5) * 3.2, y: (Math.random() - .5) * 2.4, z: 150 + Math.random() * this.FAR };
+  }
+  /* إسقاط نقطة عالم (wx, wy, wz) على الشاشة مع إزاحة اللاعب (باراللاكس) */
+  proj(v, wx, wy, wz) {
+    const s = this.FOV / Math.max(wz, 40);
+    return {
+      x: v.cx0 + (wx - v.px * .45) * s * 100,
+      y: this.H * .52 + (wy - v.py * .45) * s * 100,
+      s
+    };
+  }
+  update(dt) {
+    this.baseUpdate(dt);
+    const now = performance.now();
+    const prog = Math.min(1, this.elapsed / 90);
+    const speed = 300 + 330 * prog;
+    for (const v of this.views) {
+      // توجيه التنين: هدف الشاشة من الكاميرا/الماوس ثم تحويله لموضع العالم
+      const zone = { x0: v.vx + v.vw * .1, x1: v.vx + v.vw * .9, y0: 90, y1: this.H - 100 };
+      const tgt = this.bodyTarget(this.twoPlayer ? v.side : null, now, { x: v.sx, y: v.sy }, zone);
+      v.sx += (tgt.x - v.sx) * Math.min(1, dt * 5);
+      v.sy += (tgt.y - v.sy) * Math.min(1, dt * 5);
+      v.px = Math.max(-1, Math.min(1, (v.sx - v.cx0) / (v.vw * .42)));
+      v.py = Math.max(-1, Math.min(1, (v.sy - this.H * .55) / (this.H * .38)));
+      v.bank += (Math.max(-.5, Math.min(.5, (tgt.x - v.sx) / (v.vw * .25))) - v.bank) * .12;
+
+      v.dist += speed * dt;
+      if (v.dist >= 40) {
+        v.dist -= 40;
+        if (this.twoPlayer) { if (v.side === 0) this.scoreA++; else this.scoreB++; }
+        else this.score++;
+      }
+      if (v.inv > 0) v.inv -= dt;
+
+      // ذيل النار
+      v.trailT += dt;
+      if (v.trailT > .05) {
+        v.trailT = 0;
+        this.particles.list.push({
+          x: v.sx + (Math.random() - .5) * 26, y: v.sy + 30,
+          vx: (Math.random() - .5) * 60, vy: 120 + Math.random() * 80,
+          r: 3 + Math.random() * 5, life: .4, age: 0, grav: 0,
+          color: ['#fb923c', '#fbbf24', '#f87171'][(Math.random() * 3) | 0]
+        });
+      }
+
+      // توليد الأغراض في العمق
+      v.spawnT -= dt;
+      if (v.spawnT <= 0) {
+        const roll = Math.random();
+        let type = 'obstacle', emoji = SP_OBSTACLES[(Math.random() * SP_OBSTACLES.length) | 0];
+        if (roll < .26) { type = 'gem'; emoji = '💎'; }
+        else if (roll < .35) { type = 'star'; emoji = '⭐'; }
+        else if (roll < .40) { type = 'heart'; emoji = '❤️'; }
+        else if (roll < .52) { type = 'ring'; emoji = ''; }
+        v.items.push({
+          x: (Math.random() - .5) * 2.3, y: (Math.random() - .5) * 1.7,
+          z: this.FAR, type, emoji, resolved: false
+        });
+        v.spawnT = Math.max(.32, .6 - prog * .26) + Math.random() * .25;
+      }
+
+      // النجوم تتحرك أبطأ (عمق أبعد)
+      for (const st of v.stars) {
+        st.z -= speed * .55 * dt;
+        if (st.z < 70) { const ns = this.newStar(); st.x = ns.x; st.y = ns.y; st.z = this.FAR; }
+      }
+
+      for (const it of v.items) {
+        it.z -= speed * dt;
+        if (!it.resolved && it.z <= this.DZ) {
+          it.resolved = true;
+          const dx = it.x - v.px, dy = it.y - v.py;
+          const p = this.proj(v, it.x, it.y, this.DZ);
+          const fx = Math.max(v.vx + 30, Math.min(v.vx + v.vw - 30, p.x));
+          const fy = Math.max(60, Math.min(this.H - 40, p.y));
+          if (it.type === 'ring') {
+            if (Math.abs(dx) < .32 && Math.abs(dy) < .32) {
+              if (this.twoPlayer) this.addScoreP(v.side, 25, fx, fy);
+              else this.addScore(25, fx, fy, '#fbbf24');
+              this.particles.burst(fx, fy, ['#fbbf24', '#fff', '#fb923c'], 16);
+              SFX.golden();
+            }
+          } else if (Math.abs(dx) < .5 && Math.abs(dy) < .45) {
+            if (it.type === 'obstacle') {
+              if (v.inv <= 0) {
+                v.inv = 1.6; this.shakeT = .45; this.flashT = .5;
+                SFX.bomb();
+                this.particles.burst(fx, fy, ['#ef4444', '#f97316'], 18);
+                if (this.twoPlayer) {
+                  if (v.side === 0) this.scoreA = Math.max(0, this.scoreA - 20);
+                  else this.scoreB = Math.max(0, this.scoreB - 20);
+                  this.texts.add(fx, fy - 40, P_EMojis[v.side] + ' -20', P_COLORS[v.side]);
+                  this.app.hudUpdate(this);
+                } else {
+                  this.lives--;
+                  this.app.hudUpdate(this);
+                  if (this.lives <= 0) { this.endGame(); return; }
+                }
+              }
+            } else if (it.type === 'heart') {
+              SFX.catchFruit();
+              if (!this.twoPlayer && this.lives < 3) { this.lives++; this.app.hudUpdate(this); this.texts.add(fx, fy, '❤️+', '#fda4af'); }
+              else if (this.twoPlayer) this.addScoreP(v.side, 15, fx, fy);
+              else this.addScore(15, fx, fy, '#fda4af');
+            } else {
+              const pts = it.type === 'star' ? 25 : 10;
+              if (this.twoPlayer) this.addScoreP(v.side, pts, fx, fy);
+              else this.addScore(pts, fx, fy, it.type === 'star' ? '#fbbf24' : '#67e8f9');
+              if (it.type === 'star') SFX.golden(); else SFX.catchFruit();
+              this.particles.burst(fx, fy, ['#67e8f9', '#fff'], 10, 200);
+            }
+          }
+        }
+        if (it.z < 90) it.dead = true;
+      }
+      v.items = v.items.filter(it => !it.dead);
+    }
+    if (this.flashT > 0) this.flashT -= dt;
+  }
+  draw(ctx) {
+    const W = this.W, H = this.H;
+    ctx.clearRect(0, 0, W, H);
+    if (this.shakeT > 0) {
+      const m = this.shakeT * 30;
+      ctx.translate((Math.random() - .5) * m, (Math.random() - .5) * m);
+    }
+    for (const v of this.views) {
+      // فضاء + كوكب بعيد
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, 'rgba(12,10,40,.85)');
+      grad.addColorStop(1, 'rgba(30,10,60,.8)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(v.vx - 4, -40, v.vw + 8, H + 80);
+      const pl = v.planet;
+      const pg = ctx.createRadialGradient(pl.x - pl.r * .3, pl.y - pl.r * .3, pl.r * .2, pl.x, pl.y, pl.r);
+      pg.addColorStop(0, 'rgba(147,197,253,.28)');
+      pg.addColorStop(.7, 'rgba(99,102,241,.18)');
+      pg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = pg;
+      ctx.beginPath(); ctx.arc(pl.x, pl.y, pl.r, 0, Math.PI * 2); ctx.fill();
+
+      // النجوم (تزيد سرعة كل ما قربت)
+      for (const st of v.stars) {
+        const p = this.proj(v, st.x, st.y, st.z);
+        if (p.x < v.vx - 10 || p.x > v.vx + v.vw + 10) continue;
+        ctx.globalAlpha = Math.min(1, p.s * 1.6) * .9;
+        ctx.fillStyle = '#fff';
+        const r = Math.max(.7, p.s * 1.4);
+        if (p.s > 2) { // خط سرعة للنجوم القريبة
+          ctx.fillRect(p.x, p.y, 1.6, r * 4);
+        } else {
+          ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      ctx.globalAlpha = 1;
+
+      // الأغراض: من البعيد للقريب
+      const sorted = [...v.items].sort((a, b) => b.z - a.z);
+      for (const it of sorted) {
+        const p = this.proj(v, it.x, it.y, it.z);
+        if (p.x < v.vx - 200 || p.x > v.vx + v.vw + 200) continue;
+        ctx.save();
+        if (it.type === 'ring') {
+          ctx.strokeStyle = '#fbbf24';
+          ctx.lineWidth = 8 * p.s + 2;
+          ctx.shadowColor = '#f59e0b'; ctx.shadowBlur = 12 * p.s;
+          ctx.beginPath();
+          ctx.ellipse(p.x, p.y, 70 * p.s, 60 * p.s, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        } else {
+          ctx.font = `${Math.max(11, Math.round(90 * p.s))}px serif`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 6;
+          ctx.fillText(it.emoji, p.x, p.y);
+        }
+        ctx.restore();
+      }
+
+      this.drawDragonBack(ctx, v);
+    }
+    // الجسيمات والنصوص فوق كل شيء
+    this.particles.draw(ctx);
+    this.texts.draw(ctx);
+    if (this.twoPlayer) this.drawDivider(ctx);
+    if (this.flashT > 0) {
+      ctx.fillStyle = `rgba(239,68,68,${this.flashT * .45})`;
+      ctx.fillRect(-40, -40, W + 80, H + 80);
+    }
+  }
+  /* التنين من الخلف: جسم + جناحان يرفرفان + ذيل + قرون */
+  drawDragonBack(ctx, v) {
+    const flap = Math.sin(this.elapsed * 9);
+    const bob = Math.sin(this.elapsed * 6) * 5;
+    const S = Math.min(v.vw * .17, 120) / 100;
+    ctx.save();
+    ctx.translate(v.sx, v.sy + bob);
+    ctx.rotate(v.bank * .7);
+    ctx.scale(S, S);
+    if (v.inv > 0) ctx.globalAlpha = .5 + .4 * Math.sin(this.elapsed * 25);
+
+    // الجناحان
+    for (const dir of [-1, 1]) {
+      ctx.save();
+      ctx.translate(dir * 34, -14);
+      ctx.rotate(dir * (.45 + flap * .3));
+      const wg = ctx.createLinearGradient(0, 0, dir * 95, -30);
+      wg.addColorStop(0, '#0d9488');
+      wg.addColorStop(1, '#5eead4');
+      ctx.fillStyle = wg;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(dir * 55, -55, dir * 100, -18);
+      ctx.quadraticCurveTo(dir * 70, -6, dir * 92, 14);
+      ctx.quadraticCurveTo(dir * 50, 8, 0, 22);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    // الذيل
+    ctx.fillStyle = '#0f766e';
+    ctx.beginPath();
+    ctx.moveTo(-16, 26);
+    ctx.lineTo(16, 26);
+    ctx.lineTo(4, 62);
+    ctx.closePath();
+    ctx.fill();
+    // الجسم
+    const bg = ctx.createLinearGradient(0, -34, 0, 34);
+    bg.addColorStop(0, '#14b8a6');
+    bg.addColorStop(1, '#115e59');
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    ctx.ellipse(0, 6, 26, 34, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // الرأس + القرون
+    ctx.beginPath();
+    ctx.ellipse(0, -30, 17, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#5eead4';
+    for (const hx of [-8, 8]) {
+      ctx.beginPath();
+      ctx.moveTo(hx - 4, -38);
+      ctx.lineTo(hx + 4, -38);
+      ctx.lineTo(hx, -54);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // شعار اللاعب
+    if (this.twoPlayer) {
+      ctx.font = '700 24px "Segoe UI", Arial';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillStyle = P_COLORS[v.side];
+      ctx.fillText(P_EMojis[v.side], v.sx, v.sy - 70 * S - 20);
+    }
+  }
+}
+
 /* تعريفات الألعاب للقائمة */
 const GAMES = {
-  pop:    { cls: PopGame,    name: 'اضرب الكرات',   icon: '🎈', stars: [50, 120, 200], dur: 60 },
-  catch:  { cls: CatchGame,  name: 'اصطياد الفواكه', icon: '🍎', stars: [150, 350, 600], dur: 90 },
-  whack:  { cls: WhackGame,  name: 'اضرب الخُلد',    icon: '🐹', stars: [60, 130, 220], dur: 60 },
-  race:   { cls: RaceGame,   name: 'سباق السيارات',  icon: '🚗', stars: [1500, 3000, 4500], dur: 90 },
-  dragon: { cls: DragonGame, name: 'التنين الطاير',  icon: '🐉', stars: [400, 900, 1500], dur: 90 },
-  dance:  { cls: PoseGame,   name: 'الرقص واللمس',   icon: '🕺', stars: [80, 160, 260], dur: 60 },
-  goalie: { cls: GoalieGame, name: 'حراسة المرمى',   icon: '🥅', stars: [80, 150, 240], dur: 90 },
-  runner: { cls: RunnerGame, name: 'عدّي العوائق',   icon: '🏃', stars: [500, 1000, 1600], dur: 90 }
+  pop:     { cls: PopGame,      name: 'اضرب الكرات',   icon: '🎈', stars: [50, 120, 200], dur: 60 },
+  catch:   { cls: CatchGame,    name: 'اصطياد الفواكه', icon: '🍎', stars: [150, 350, 600], dur: 90 },
+  whack:   { cls: WhackGame,    name: 'اضرب الخُلد',    icon: '🐹', stars: [60, 130, 220], dur: 60 },
+  race:    { cls: RaceGame,     name: 'سباق السيارات',  icon: '🚗', stars: [1500, 3000, 4500], dur: 90 },
+  dragon:  { cls: DragonGame,   name: 'التنين الطاير',  icon: '🐉', stars: [400, 900, 1500], dur: 90 },
+  dance:   { cls: PoseGame,     name: 'الرقص واللمس',   icon: '🕺', stars: [80, 160, 260], dur: 60 },
+  goalie:  { cls: GoalieGame,   name: 'حراسة المرمى',   icon: '🥅', stars: [80, 150, 240], dur: 90 },
+  runner:  { cls: RunnerGame,   name: 'عدّي العوائق',   icon: '🏃', stars: [500, 1000, 1600], dur: 90 },
+  space:   { cls: Dragon3DGame, name: 'التنين الفضائي 3D', icon: '🐲', stars: [400, 900, 1500], dur: 90 }
 };
