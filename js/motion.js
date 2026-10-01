@@ -106,20 +106,18 @@ class MotionEngine {
       this.hasTrack = true;
       moved = true;
     }
-    if (cL > 40) {
-      const nx = (sXL / cL) / MW, ny = (sYL / cL) / MH;
+    // مراكز نصفي الشاشة: نحدد الجهة بعد تحويل المرآة (cover crop + scaleX(-1))
+    // حتى يطابق كل نصف ما يراه الطفل فعلاً على الشاشة، بصرف النظر عن إعداد المرآة
+    const trackHalf = (cnt, sumHalfX, sumHalfY) => {
+      if (cnt <= 40) return;
+      const nx = (sumHalfX / cnt) / MW, ny = (sumHalfY / cnt) / MH;
       const [sx] = this.camToScreen(nx, ny, W, H);
-      this.cxL += (sx / W - this.cxL) * a;
-      this.hasTrackL = true;
+      if (sx < W / 2) { this.cxL += (sx / W - this.cxL) * a; this.hasTrackL = true; }
+      else { this.cxR += (sx / W - this.cxR) * a; this.hasTrackR = true; }
       moved = true;
-    }
-    if (cR > 40) {
-      const nx = (sXR / cR) / MW, ny = (sYR / cR) / MH;
-      const [sx] = this.camToScreen(nx, ny, W, H);
-      this.cxR += (sx / W - this.cxR) * a;
-      this.hasTrackR = true;
-      moved = true;
-    }
+    };
+    trackHalf(cL, sXL, sYL);
+    trackHalf(cR, sXR, sYR);
     if (moved) this.lastMoveTime = performance.now();
 
     // تبديل المخازن
